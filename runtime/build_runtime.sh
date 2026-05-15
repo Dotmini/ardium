@@ -54,11 +54,13 @@ elif [ "$OS" == "Linux" ]; then
     clang++ -c -o "$BUILD_DIR/runtime_common.o" "$RUNTIME_SRC/runtime_common.cpp" -std=c++17 -fPIC
     
     # On Linux we don't compile runtime.m
-    # We link with -shared, -lpthread, -ldl
+    # We compile the C++ stubs instead
+    clang++ -c -o "$BUILD_DIR/runtime_gui_stubs.o" "$RUNTIME_SRC/runtime_gui_stubs.cpp" -std=c++17 -fPIC
     
     clang++ -shared -o "$OUTPUT_LIB" \
         "$BUILD_DIR/runtime_core.o" \
         "$BUILD_DIR/runtime_common.o" \
+        "$BUILD_DIR/runtime_gui_stubs.o" \
         -lpthread -ldl -lm
         
     OUTPUT_NAME="libardium.so"
@@ -70,7 +72,8 @@ elif [[ "$OS" == *"MINGW"* ]] || [[ "$OS" == *"CYGWIN"* ]] || [[ "$OS" == *"MSYS
     if command -v clang++ &> /dev/null; then
         clang++ -c -o "$BUILD_DIR/runtime_core.o" "$RUNTIME_SRC/runtime_core.cpp" -std=c++17
         clang++ -c -o "$BUILD_DIR/runtime_common.o" "$RUNTIME_SRC/runtime_common.cpp" -std=c++17
-        clang++ -shared -o "$OUTPUT_LIB" "$BUILD_DIR/runtime_core.o" "$BUILD_DIR/runtime_common.o"
+        clang++ -c -o "$BUILD_DIR/runtime_gui_stubs.o" "$RUNTIME_SRC/runtime_gui_stubs.cpp" -std=c++17
+        clang++ -shared -o "$OUTPUT_LIB" "$BUILD_DIR/runtime_core.o" "$BUILD_DIR/runtime_common.o" "$BUILD_DIR/runtime_gui_stubs.o"
         OUTPUT_NAME="libardium.dll"
     else
         echo "⚠️ clang++ not found on Windows. Creating a dummy file so build can continue."
