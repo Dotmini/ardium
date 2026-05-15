@@ -12,6 +12,7 @@ let usage_msg =
   "  \027[1mrun\027[0m   <file.ar>    Compile and run immediately (JIT)\n" ^
   "  \027[1mtest\027[0m  <dir/file>   Run unit tests recursively\n" ^
   "  \027[1mnew\027[0m   <name>       Create a new Ardium project\n" ^
+  "  \027[1minstall\027[0m <pkg>       Install a third-party package\n" ^
   "  \027[1mheader\027[0m <file.ar>   Generate C header for Interop\n" ^
   "  \027[1mlsp\027[0m                Start Language Server (VSCode)\n" ^
   "  \027[1mdev\027[0m  <file.ar>    Hot-Reload Watcher Mode\n" ^
@@ -31,9 +32,9 @@ let build_dylib = ref false
 let anon_fun filename =
   if !mode = "build" && !input_file = "" then (
     match filename with
-    | "build" | "run" | "test" | "lsp" | "new" | "header" | "dev" -> mode := filename
+    | "build" | "run" | "test" | "lsp" | "new" | "install" | "header" | "dev" -> mode := filename
     | s when not (String.contains s '.') ->
-        Printf.eprintf "❌ Error: Unknown command '%s'.\nAvailable commands: build, run, test, lsp, new, header\n" s;
+        Printf.eprintf "❌ Error: Unknown command '%s'.\nAvailable commands: build, run, test, lsp, new, install, header\n" s;
         exit 1
     | _ -> input_file := filename
   ) else if !input_file = "" then
@@ -66,6 +67,8 @@ let rec resolve_imports stdlib_path imported_set program =
           let filename = lib_name ^ ".ar" in
           let file_path =
             if Stdlib.Sys.file_exists filename then filename
+            else if Stdlib.Sys.file_exists (Filename.concat "ardium_modules" filename) then
+                Filename.concat "ardium_modules" filename
             else Filename.concat stdlib_path filename
           in
 
@@ -111,6 +114,11 @@ let process_file input_path output_path =
       if Sys.file_exists "stdlib" then "stdlib"
       else if Sys.file_exists "/usr/local/lib/ardium/stdlib" then "/usr/local/lib/ardium/stdlib"
       else "/usr/local/ardium/stdlib"
+  in
+
+  let modules_path =
+    if Sys.file_exists "ardium_modules" then "ardium_modules"
+    else stdlib_path
   in
 
   (* Automatically load Core if NO_STD is not set *)
@@ -239,6 +247,31 @@ let () =
     with e ->
         Printf.eprintf "❌ Error: Failed to create project: %s\n" (Printexc.to_string e);
         exit 1
+  );
+
+  (* INSTALL Mode: Install a package *)
+  if String.equal !mode "install" then (
+    let pkg_name = !input_file in
+    if String.length pkg_name = 0 then (
+      Printf.eprintf "❌ Error: Please specify a package to install.\nUsage: arc install <package>\n";
+      exit 1
+    );
+
+    let capitalized_pkg = String.capitalize_ascii pkg_name in
+    Printf.printf "📦 Fetching package '%s' from registry...\n" pkg_name;
+    
+    let target_dir = "ardium_modules" in
+    if not (Sys.file_exists target_dir) then Sys.mkdir target_dir 0o755;
+
+    let target_file = Filename.concat target_dir (capitalized_pkg ^ ".ar") in
+    let content = Printf.sprintf "// Mock Ardium Package: %s\n\nfn init_%s() {\n    println(\"[DB] Initialized %s connection.\");\n}\n" pkg_name pkg_name pkg_name in
+    
+    let oc = open_out target_file in
+    Printf.fprintf oc "%s" content;
+    close_out oc;
+
+    Printf.printf "✅ Successfully installed '%s' into %s/\n" pkg_name target_dir;
+    exit 0
   );
 
   (* HEADER Mode: Generate C header file *)

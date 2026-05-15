@@ -16,15 +16,46 @@
 extern "C" {
 
 // ============================================================================
-// MEMORY MANAGEMENT (Direct syscall bridge only)
+// MEMORY MANAGEMENT (ARC & Syscall Bridge)
 // ============================================================================
 
+// Internal struct to hold ARC metadata
+typedef struct {
+    uint32_t ref_count;
+    uint32_t flags;
+    char payload[];
+} arc_header_t;
+
 void* __sys_malloc(size_t size) {
-    return malloc(size);
+    // Allocate extra space for ARC header
+    arc_header_t* header = (arc_header_t*)malloc(sizeof(arc_header_t) + size);
+    if (!header) return NULL;
+    header->ref_count = 1; // Default to 1 on creation
+    header->flags = 0;
+    return header->payload;
 }
 
 void __sys_free(void* ptr) {
-    free(ptr);
+    if (!ptr) return;
+    arc_header_t* header = (arc_header_t*)((char*)ptr - sizeof(arc_header_t));
+    free(header);
+}
+
+void __arc_retain(void* ptr) {
+    if (!ptr) return;
+    arc_header_t* header = (arc_header_t*)((char*)ptr - sizeof(arc_header_t));
+    header->ref_count += 1;
+}
+
+void __arc_release(void* ptr) {
+    if (!ptr) return;
+    arc_header_t* header = (arc_header_t*)((char*)ptr - sizeof(arc_header_t));
+    if (header->ref_count > 0) {
+        header->ref_count -= 1;
+        if (header->ref_count == 0) {
+            free(header);
+        }
+    }
 }
 
 void* __sys_realloc(void* ptr, size_t size) {
@@ -156,7 +187,7 @@ char* ardium_strcat(const char* s1, const char* s2) {
     if (!s2) s2 = "";
     size_t len1 = strlen(s1);
     size_t len2 = strlen(s2);
-    char* result = (char*)malloc(len1 + len2 + 1);
+    char* result = (char*)__sys_malloc(len1 + len2 + 1); // Use ARC malloc
     strcpy(result, s1);
     strcat(result, s2);
     return result;

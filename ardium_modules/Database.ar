@@ -1,0 +1,5 @@
+// Mock Ardium Package: database
+
+fn init_database() {
+    println("[DB] Initialized database connection.");
+}

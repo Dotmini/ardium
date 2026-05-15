@@ -6,7 +6,7 @@
 %token <float> FLOAT
 %token <string> STRING ID
 %token FN LET VAR IF ELIF ELSE LOOP RETURN EXTERN PRINT EXPORT TEST IMPORT INTERRUPT
-%token ASYNC AWAIT SPAWN VCLASS HCLASS ZCLASS
+%token ASYNC AWAIT SPAWN VCLASS HCLASS ZCLASS TRY CATCH OWN BORROW
 %token GLOBAL_KEY RESET ERR CONT CON CLASS STRUCT ENUM YED DECORATOR AS MUT
 %token LPAREN RPAREN LBRACE RBRACE LBRACKET RBRACKET SEMI COMMA EQUAL BANG
 %token PLUS MINUS TIMES DIV POW MOD EQ_EQ NOT_EQ LESS GREATER LE GE
@@ -54,6 +54,8 @@ stmt:
     { FuncDef({ name=name; args=args; body=body; is_export=List.mem "export" attrs; is_test=List.mem "test" attrs; is_interrupt=List.mem "interrupt" attrs; decorators=attrs }) }
   | attrs = decorators; VAR; name = ID; ty = option(type_ann); EQUAL; e = expr; eos { Let(name, ty, e, attrs) }
   | attrs = decorators; LET; option(MUT); name = ID; ty = option(type_ann); EQUAL; e = expr; eos { Let(name, ty, e, attrs) }
+  | attrs = decorators; OWN; option(MUT); name = ID; ty = option(type_ann); EQUAL; e = expr; eos { Own(name, ty, e, attrs) }
+  | attrs = decorators; BORROW; option(MUT); name = ID; ty = option(type_ann); EQUAL; e = expr; eos { Borrow(name, ty, e, attrs) }
   | SPAWN; LBRACE; body = stmts; RBRACE { Spawn(body) }
   | VCLASS; LBRACE; body = stmts; RBRACE { VClass(body) }
   | HCLASS; LBRACE; body = stmts; RBRACE { HClass(body) }
@@ -69,6 +71,7 @@ stmt_base:
       { let es_body = match es with Some b -> b | None -> [] in If(cond, ts, es_body) }
   | LOOP; cond = expr; option(COLON); LBRACE; b = stmts; RBRACE { While(cond, b) }
   | LOOP; LPAREN; cond = expr; RPAREN; option(COLON); LBRACE; b = stmts; RBRACE { While(cond, b) }
+  | TRY; LBRACE; try_body = stmts; RBRACE; CATCH; LPAREN; err_name = ID; RPAREN; LBRACE; catch_body = stmts; RBRACE { TryCatch(try_body, err_name, catch_body) }
   | RETURN; e = expr; eos { Return(e) }
   | GLOBAL_KEY; LPAREN; e = expr; RPAREN; action = global_action; eos { action e }
   | RESET; LPAREN; RPAREN; eos { Reset }

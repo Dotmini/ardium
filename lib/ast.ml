@@ -24,12 +24,15 @@ type expr =
 
 and stmt =
   | Let of string * string option * expr * string list (* NEW: name, type?, expr, decorators *)
+  | Own of string * string option * expr * string list
+  | Borrow of string * string option * expr * string list
   | Assign of expr * expr
   | GlobalDecl of string * expr list
   | Decorator of string * stmt list
   | ClassDecl of string * expr option * stmt list * string list
   | While of expr * stmt list
   | If of expr * stmt list * stmt list
+  | TryCatch of stmt list * string * stmt list (* NEW: try { ... } catch (e) { ... } *)
   | Reset
   | Err of string option
   | Return of expr

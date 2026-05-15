@@ -222,6 +222,18 @@ module Builtins = struct
     | Some f -> f
     | None -> declare_function "malloc" malloc_ty ctx.Context.the_module
 
+  let get_or_declare_arc_retain ctx =
+    let ty = function_type (Types.void_type ctx) [| Types.i8_ptr_type ctx |] in
+    match lookup_function "__arc_retain" ctx.Context.the_module with
+    | Some f -> f
+    | None -> declare_function "__arc_retain" ty ctx.Context.the_module
+
+  let get_or_declare_arc_release ctx =
+    let ty = function_type (Types.void_type ctx) [| Types.i8_ptr_type ctx |] in
+    match lookup_function "__arc_release" ctx.Context.the_module with
+    | Some f -> f
+    | None -> declare_function "__arc_release" ty ctx.Context.the_module
+
   let get_or_declare_strcmp ctx =
     let strcmp_ty = function_type (Types.i32_type ctx)
                       [| Types.i8_ptr_type ctx; Types.i8_ptr_type ctx |] in
@@ -793,7 +805,35 @@ module Stmt = struct
         let var_type = type_of init_val in
         let alloca = build_alloca var_type name ctx.Context.builder in
         ignore (build_store init_val alloca ctx.Context.builder);
+        
+        (* Implicit ARC Retain for pointers *)
+        if Types.is_pointer_type var_type then (
+            let retain_fn = Builtins.get_or_declare_arc_retain ctx in
+            let retain_ty = function_type (Types.void_type ctx) [| Types.i8_ptr_type ctx |] in
+            ignore (build_call retain_ty retain_fn [| init_val |] "" ctx.Context.builder)
+        );
+        
         Context.add_named_value ctx name alloca var_type
+
+    | Own (name, _ty_opt, expr, _decs) ->
+        (* Ownership transfer - no retain called, but will be released at end of scope *)
+        let init_val = Expr.codegen ctx expr in
+        let var_type = type_of init_val in
+        let alloca = build_alloca var_type name ctx.Context.builder in
+        ignore (build_store init_val alloca ctx.Context.builder);
+        Context.add_named_value ctx name alloca var_type
+
+    | Borrow (name, _ty_opt, expr, _decs) ->
+        (* Borrowing - no retain, no release *)
+        let init_val = Expr.codegen ctx expr in
+        let var_type = type_of init_val in
+        let alloca = build_alloca var_type name ctx.Context.builder in
+        ignore (build_store init_val alloca ctx.Context.builder);
+        Context.add_named_value ctx name alloca var_type
+
+    | TryCatch (try_block, err_name, catch_block) ->
+        (* Try-Catch stub for MVP: execute try block synchronously for now *)
+        List.iter (fun stmt -> ignore (codegen ctx func_val stmt)) try_block
 
     | Assign (lhs, rhs) -> begin
         match lhs with

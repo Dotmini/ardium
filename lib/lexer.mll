@@ -19,8 +19,12 @@ rule read = parse
   | "func"   { FN }
   | "var"    { VAR }
   | "let"    { LET }
+  | "own"    { OWN }
+  | "borrow" { BORROW }
   | "async"  { ASYNC }
   | "await"  { AWAIT }
+  | "try"    { TRY }
+  | "catch"  { CATCH }
   | "mut"    { MUT }
   | "if"     { IF }
   | "elif"   { ELIF }

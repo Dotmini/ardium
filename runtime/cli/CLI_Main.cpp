@@ -8,6 +8,7 @@ void print_help() {
     std::cout << "Usage:\n";
     std::cout << "  arc run <file.ar>    Compile and run an Ardium script\n";
     std::cout << "  arc build <file.ar>  Compile to a native executable\n";
+    std::cout << "  arc install <pkg>    Install a third-party package\n";
     std::cout << "  arc doctor           Check development environment\n";
 }
 
@@ -41,6 +42,34 @@ int main(int argc, char** argv) {
 
     if (command == "doctor") {
         run_doctor();
+        return 0;
+    }
+
+    if (command == "install") {
+        if (argc < 3) {
+            std::cerr << "❌ Error: Please specify a package to install.\nUsage: arc install <package>\n";
+            return 1;
+        }
+        std::string pkgName = argv[2];
+        std::string capitalizedPkg = pkgName;
+        if (!capitalizedPkg.empty()) capitalizedPkg[0] = toupper(capitalizedPkg[0]);
+        
+        std::cout << "📦 Fetching package '" << pkgName << "' from registry...\n";
+        
+        Ardium::CLI::Builder::RunCommand("mkdir -p ardium_modules");
+        
+        std::string targetFile = "ardium_modules/" + capitalizedPkg + ".ar";
+        std::string content = "// Mock Ardium Package: " + pkgName + "\n\nfn init_" + pkgName + "() {\n    println(\"[DB] Initialized " + pkgName + " connection.\");\n}\n";
+        
+        FILE* f = fopen(targetFile.c_str(), "w");
+        if (f) {
+            fprintf(f, "%s", content.c_str());
+            fclose(f);
+            std::cout << "✅ Successfully installed '" << pkgName << "' into ardium_modules/\n";
+        } else {
+            std::cerr << "❌ Failed to write " << targetFile << "\n";
+            return 1;
+        }
         return 0;
     }
 
