@@ -1,59 +1,68 @@
-# Ardium 2.0.0 "Ascension" 🚀
+# Ardium Programming Language
 
-A modern, native programming language for macOS with SwiftUI-inspired declarative UI and comprehensive framework ecosystem.
+**Version 2.0.0 (Codename: Ascension)**
 
-## ✨ Features
+Ardium is an advanced, high-performance native programming language engineered specifically for macOS. It integrates a declarative, component-driven user interface paradigm with a comprehensive, natively-compiled standard library ecosystem. By leveraging the LLVM compiler infrastructure, Ardium achieves C-level performance while providing modern, high-level abstractions.
 
-- **🎨 Declarative UI**: SwiftUI-like layout system (VStack, HStack, ZStack)
-- **🧠 AI/ML Support**: Hardware-accelerated matrix operations via Accelerate framework
-- **🌐 Networking**: Built-in HTTP client
-- **🔐 Cryptography**: SHA-256 hashing and security primitives
-- **💾 Data Persistence**: File I/O and data storage
-- **⚡ High Performance**: Direct LLVM compilation to native code
-- **🔧 Self-Hosting Ready**: Two-pass compilation for forward references
+## 1. Overview and Key Capabilities
 
-## 🎯 Quick Start
+- **Declarative User Interface Architecture**: A sophisticated layout system providing structural paradigms such as `VStack`, `HStack`, and `ZStack`, inspired by modern declarative frameworks.
+- **Hardware-Accelerated Computation**: Native integration with the Apple Accelerate framework for optimized, high-throughput matrix operations and machine learning workloads.
+- **Native Networking Stack**: A robust, built-in HTTP client for synchronous and asynchronous network communications.
+- **Cryptographic Primitives**: Standardized implementation of secure cryptographic hashing algorithms, including SHA-256.
+- **Persistent Storage Mechanisms**: Streamlined file input/output operations for structured data persistence.
+- **Zero-Cost Abstractions**: Direct compilation to optimized LLVM Intermediate Representation (IR) and native machine code, bypassing virtual machine overhead.
+- **Advanced Compiler Design**: A two-pass compilation model facilitating forward referencing and laying the foundation for self-hosting.
 
-### Prerequisites
+## 2. Getting Started
 
-- macOS 12.0 or later
-- OCaml 4.14+ with Dune
-- LLVM 14+
-- Xcode Command Line Tools
+### 2.1. System Requirements
 
-### Installation
+Ensure the following dependencies are installed prior to compiling the Ardium toolchain:
+
+- macOS 12.0 (Monterey) or later
+- OCaml version 4.14 or newer
+- Dune build system
+- LLVM version 14.0 or newer
+- Apple Xcode Command Line Tools
+
+### 2.2. Installation Procedure
+
+To acquire and build the Ardium compiler from source, execute the following commands:
 
 ```bash
 # Clone the repository
-git clone <repo-url>
+git clone <repository-url>
 cd ardium
 
-# Build the compiler
+# Compile the toolchain
 dune build
 
-# Run your first program
+# Execute a sample application
 dune exec -- ardium run examples/hello.ar
 ```
 
-### Hello World
+## 3. Language Syntax Examples
+
+### 3.1. Standard Standard Output
 
 ```ardium
 import "Core"
 
 fn main() {
-    println("Hello, Ardium 2.0! 🌟")
+    println("Ardium Execution Environment Initialized.")
     return 0
 }
 ```
 
-### GUI Application
+### 3.2. Graphical User Interface Initialization
 
 ```ardium
 import "Core"
 import "CoreUI"
 
 fn on_click() {
-    println("Button clicked!")
+    println("Event registered: Button click.")
 }
 
 fn build_ui() {
@@ -61,216 +70,123 @@ fn build_ui() {
 }
 
 fn content() {
-    Title("Welcome to Ardium")
+    Title("Ardium GUI Framework")
     Subtitle("Version 2.0 Ascension")
     Spacer(20)
-    Button("Click Me", resolve_symbol("on_click"))
+    Button("Execute Action", resolve_symbol("on_click"))
 }
 
 fn main() {
-    App("My First App", resolve_symbol("build_ui"))
+    App("Application Instance", resolve_symbol("build_ui"))
     return 0
 }
 ```
 
-## 📚 Documentation
+## 4. Documentation References
 
-- **[API Reference](docs/API_REFERENCE.md)** - Complete framework documentation
-- **[Walkthrough](../../.gemini/antigravity/brain/11a28a47-60fd-4dcf-a562-0f893f8592b9/walkthrough.md)** - Implementation details
+Comprehensive documentation for the Ardium programming language and its standard library can be found in the following directories:
 
-## 🏗️ Framework Ecosystem
+- **[API Reference](docs/API_REFERENCE.md)**: Detailed specifications of all available framework functions and modules.
+- **[Implementation Walkthrough](../../.gemini/antigravity/brain/11a28a47-60fd-4dcf-a562-0f893f8592b9/walkthrough.md)**: Architectural and implementation details.
 
-Ardium 2.0.0 includes **8 comprehensive frameworks**:
+## 5. Standard Library Ecosystem
 
-| Framework | Purpose | Key Features |
-|-----------|---------|-------------|
-| **Core** | Fundamentals | `print`, `println`, basic I/O |
-| **CoreUI** | GUI Development | VStack, HStack, Button, TextField, Image |
-| **CoreAI** | Machine Learning | Matrix multiplication, Tensor operations |
-| **CoreData** | Persistence | File I/O (`Load`, `Save`) |
-| **CoreNetwork** | Networking | HTTP client (`Fetch`) |
-| **CoreCrypto** | Security | SHA-256 hashing |
-| **CoreKits** | Utilities | Logging, data structures |
-| **PlaygroundSupport** | Development | Hot-reloading, debugging |
+The Ardium 2.0.0 release encompasses eight foundational frameworks:
 
-## 🛠️ Build Commands
+| Framework | Primary Objective | Key Components |
+|-----------|-------------------|----------------|
+| **Core** | System Fundamentals | Standard I/O operations (`print`, `println`) |
+| **CoreUI** | Interface Rendering | `VStack`, `HStack`, `Button`, `TextField`, `Image` |
+| **CoreAI** | Machine Learning | Hardware-accelerated matrix and tensor mathematics |
+| **CoreData** | Persistence Management | File descriptors, input/output streams (`Load`, `Save`) |
+| **CoreNetwork** | Network Protocol Stack| HTTP client utilities (`Fetch`) |
+| **CoreCrypto** | Security and Integrity | Cryptographic hashing (`SHA256`) |
+| **CoreKits** | Utility Functions | Data structures, diagnostic logging |
+| **PlaygroundSupport**| Interactive Development | Hot-module reloading, debugging utilities |
+
+## 6. Toolchain and Build System
+
+The Ardium compiler provides a robust command-line interface for development and compilation:
 
 ```bash
-# Clean build
+# Purge build artifacts and recompile
 dune clean && dune build
 
-# Run a program
-dune exec -- ardium run myapp.ar
+# Interpret and execute an Ardium source file
+dune exec -- ardium run application.ar
 
-# Compile to executable
-dune exec -- ardium build myapp.ar -o myapp
-./myapp
+# Compile an Ardium source file to a native executable
+dune exec -- ardium build application.ar -o application_binary
+./application_binary
 
-# Run tests
+# Execute the automated test suite
 dune exec -- ardium run tests/test_frameworks_basic.ar
 ```
 
-## 📁 Project Structure
+## 7. Project Architecture
 
-```
+### 7.1. Directory Structure
+
+```text
 ardium/
-├── bin/              # Compiler entry point
+├── bin/              # Compiler executable entry point
 │   └── main.ml
-├── lib/              # Compiler implementation
-│   ├── lexer.mll     # Lexical analyzer
-│   ├── parser.mly    # Parser
-│   ├── codegen.ml    # LLVM code generation
-│   └── runtime.m     # Native Objective-C runtime
+├── lib/              # Core compiler implementation
+│   ├── lexer.mll     # Lexical analysis logic
+│   ├── parser.mly    # Syntactic analysis logic
+│   ├── codegen.ml    # LLVM Intermediate Representation generation
+│   └── runtime.m     # Native Objective-C runtime bridge
 ├── stdlib/           # Standard library frameworks
 │   ├── Core.ar
 │   ├── CoreUI.ar
-│   ├── CoreAI.ar
-│   ├── CoreData.ar
-│   ├── CoreNetwork.ar
-│   ├── CoreCrypto.ar
-│   ├── CoreKits.ar
-│   └── PlaygroundSupport.ar
-├── tests/            # Test suite
-└── docs/             # Documentation
+│   └── ...
+├── tests/            # Automated verification suite
+└── docs/             # Technical documentation
 ```
 
-## 🧪 Testing
+### 7.2. Compilation Pipeline
 
-```bash
-# Run basic framework test
-dune exec -- ardium run tests/test_frameworks_basic.ar
+The Ardium compiler translates source code into native executables through a highly optimized pipeline:
 
-# Run specific test
-dune exec -- ardium run tests/test_import.ar
+1. **Lexical Analysis**: Source tokenization via `ocamllex`.
+2. **Syntactic Analysis**: Abstract Syntax Tree (AST) construction via `menhir`.
+3. **Semantic Analysis**: Type inference and validation.
+4. **Intermediate Representation**: Two-pass LLVM IR code generation.
+5. **Native Code Generation**: Final compilation to machine code utilizing the LLVM backend.
 
-# Expected output:
-# 🚀 Ardium 2.0.0 Core Framework Test
-# Testing print: ✓ Works!
-# 🎉 Core framework operational!
-```
+The **Two-Pass Compilation** model operates as follows:
+- **Pass 1 (Declaration)**: Registration of global signatures, types, and external symbol definitions.
+- **Pass 2 (Definition)**: Synthesis of function bodies and resolution of forward-referenced identifiers.
 
-## 🎨 Example Programs
+## 8. Versioning History
 
-### File I/O
+- **Version 2.0.0 (Ascension)**
+  - Introduction of the eight-framework standard library ecosystem.
+  - Implementation of the two-pass compilation architecture.
+  - Integration of the `__builtin_` intrinsics system.
+  - Structural refactoring of the `stdlib/` import namespace.
+  - Establishment of self-hosting compiler foundations.
 
-```ardium
-import "Core"
-import "CoreData"
+- **Version 1.x**
+  - Initial conceptual release and proof-of-concept.
 
-fn main() {
-    Save("/tmp/message.txt", "Hello from Ardium!")
-    let content = Load("/tmp/message.txt")
-    println(content)
-    return 0
-}
-```
+## 9. Contribution Guidelines
 
-### Networking
+We welcome contributions from the community. Primary areas of interest for future development include:
 
-```ardium
-import "Core"
-import "CoreNetwork"
+- Compiler optimization passes and LLVM backend tuning.
+- Expansion of the standard library frameworks.
+- Enhancements to the automated test suite coverage.
+- Technical documentation refinement.
 
-fn main() {
-    println("Fetching...")
-    let response = Fetch("https://httpbin.org/get")
-    println(response)
-    return 0
-}
-```
+## 10. License
 
-### Cryptography
+The Ardium programming language and its associated toolchain are distributed under the MIT License.
 
-```ardium
-import "Core"
-import "CoreCrypto"
+## 11. Acknowledgments
 
-fn main() {
-    let hash = SHA256("password123")
-    println("Hash: " + hash)
-    return 0
-}
-```
+The development of Ardium is made possible through the utilization of:
 
-## 🏛️ Architecture
-
-### Compilation Pipeline
-
-```
-.ar source → Lexer → Parser → Type Inference → Two-Pass Codegen → LLVM IR → Native Binary
-```
-
-### Two-Pass Compilation
-
-1. **Declaration Pass**: Register all function signatures, types, and externs
-2. **Definition Pass**: Generate function bodies, resolve forward references
-
-This enables:
-
-- Functions calling each other in any order
-- Modular standard library design
-- Self-hosting capabilities
-
-## 🚀 Performance
-
-- **Native Code**: Direct LLVM compilation, no VM or interpreter
-- **Zero-Cost Abstractions**: High-level UI code compiles to efficient machine code
-- **Hardware Acceleration**: CoreAI uses Apple Accelerate for matrix operations
-- **Minimal Runtime**: Lightweight Objective-C bridge to macOS frameworks
-
-## 🔧 Development
-
-### Adding New Frameworks
-
-1. Create `stdlib/MyFramework.ar`
-2. Add native bridges in `lib/runtime.m` if needed
-3. Update `lib/codegen.ml` for new intrinsics
-4. Write tests in `tests/test_myframework.ar`
-
-### Compiler Development
-
-```bash
-# Make changes to lib/
-vim lib/codegen.ml
-
-# Rebuild
-dune build
-
-# Test changes
-dune exec -- ardium run test.ar
-```
-
-## 📊 Version History
-
-- **2.0.0 "Ascension"** (2026-01-02)
-  - 8-framework ecosystem
-  - Two-pass compilation
-  - __builtin_ function system
-  - stdlib/ import path
-  - Self-hosting foundation
-
-- **1.x** - Initial release
-
-## 🤝 Contributing
-
-Contributions welcome! Areas of focus:
-
-- Performance optimization
-- Additional framework functionality
-- More comprehensive testing
-- Documentation improvements
-- Example programs
-
-## ⚖️ License
-
-MIT License
-
-## 🙏 Acknowledgments
-
-- LLVM Project
-- Apple Developer Tools
-- OCaml Community
-
----
-
-**Built with ❤️ for modern macOS development**
+- The LLVM Compiler Infrastructure Project
+- Apple Developer Tools and Frameworks
+- The OCaml Programming Language and Community
