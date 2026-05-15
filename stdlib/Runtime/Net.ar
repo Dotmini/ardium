@@ -1,0 +1,87 @@
+// stdlib/Runtime/Net.ar
+// Ardium Self-Hosting Runtime: Networking (TCP Sockets)
+
+import "Runtime/Memory"
+import "Runtime/String"
+
+struct TcpListener {
+    fd: int
+    port: int
+}
+
+struct TcpStream {
+    fd: int
+}
+
+// Bind to a port
+fn TcpListener_bind(port: int) -> int {
+    let fd = __sys_socket()
+    if (fd < 0) {
+        err("Failed to create socket")
+        return 0
+    }
+    
+    let res = __sys_bind(fd, port)
+    if (res < 0) {
+        err("Failed to bind to port (is it in use?)")
+        return 0
+    }
+    
+    res = __sys_listen(fd, 128) // Backlog 128
+    if (res < 0) {
+        err("Failed to listen on socket")
+        return 0
+    }
+    
+    let listener = alloc(16) // sizeof(TcpListener)
+    __builtin_poke(listener + 0, fd)
+    __builtin_poke(listener + 8, port)
+    
+    return listener
+}
+
+// Accept incoming connection
+fn TcpListener_accept(listener: int) -> int {
+    let fd = __builtin_peek(listener + 0)
+    let client_fd = __sys_accept(fd)
+    
+    if (client_fd < 0) {
+        err("Failed to accept client connection")
+        return 0
+    }
+    
+    let stream = alloc(8) // sizeof(TcpStream)
+    __builtin_poke(stream + 0, client_fd)
+    
+    return stream
+}
+
+// Read from stream (returns String)
+fn TcpStream_read_text(stream: int) -> int {
+    let fd = __builtin_peek(stream + 0)
+    let buffer_size = 4096
+    let buffer = alloc(buffer_size)
+    
+    let bytes_read = __sys_read(fd, buffer, buffer_size)
+    if (bytes_read <= 0) {
+        return String_from_bytes(0, 0)
+    }
+    
+    return String_from_bytes(buffer, bytes_read)
+}
+
+// Write to stream
+fn TcpStream_write_text(stream: int, content: int) {
+    let fd = __builtin_peek(stream + 0)
+    let data = String_cstr(content)
+    let length = String_length(content)
+    
+    __sys_write(fd, data, length)
+}
+
+// Close stream
+fn TcpStream_close(stream: int) {
+    if (stream == 0) { return 0 }
+    let fd = __builtin_peek(stream + 0)
+    __sys_close(fd)
+}

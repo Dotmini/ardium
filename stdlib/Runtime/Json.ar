@@ -1,0 +1,93 @@
+// stdlib/Runtime/Json.ar
+// Ardium Self-Hosting Runtime: JSON Parser
+
+import "Runtime/String"
+import "Runtime/Array"
+
+// Basic JSON Object Representation (MVP)
+// A JSON object is an array of Key-Value pairs (both Strings for now)
+struct JsonObject {
+    keys: int   // Array of strings
+    values: int // Array of strings
+}
+
+fn JsonObject_new() -> int {
+    let obj = alloc(16)
+    __builtin_poke(obj + 0, Array_new(8)) // pointers are 8 bytes
+    __builtin_poke(obj + 8, Array_new(8))
+    return obj
+}
+
+fn JsonObject_set(obj: int, key: int, value: int) {
+    let keys = __builtin_peek(obj + 0)
+    let values = __builtin_peek(obj + 8)
+    
+    Array_push(keys, key)
+    Array_push(values, value)
+}
+
+fn JsonObject_get(obj: int, target_key: int) -> int {
+    let keys = __builtin_peek(obj + 0)
+    let values = __builtin_peek(obj + 8)
+    let len = Array_length(keys)
+    
+    let i = 0
+    while (i < len) {
+        let k = Array_get(keys, i)
+        // Since Array_get returns pointer to the element (which is a pointer itself)
+        let actual_k = __builtin_peek(k)
+        
+        if (String_equals(actual_k, target_key) == 1) {
+            let v = Array_get(values, i)
+            return __builtin_peek(v)
+        }
+        i = i + 1
+    }
+    
+    return String_from_bytes(0, 0)
+}
+
+// Parses {"key": "value", "key2": "value2"}
+fn Json_parse(json_str: int) -> int {
+    let obj = JsonObject_new()
+    let len = String_length(json_str)
+    let data = __builtin_peek(json_str + 0)
+    
+    let i = 0
+    let in_string = 0
+    let current_str_start = 0
+    
+    let current_key = 0
+    let current_val = 0
+    let expecting_key = 1
+    
+    while (i < len) {
+        let char = __builtin_peek(data + i)
+        
+        // '"' character is 34
+        if (char == 34) {
+            if (in_string == 1) {
+                // End of string
+                in_string = 0
+                let parsed_str = String_substring(json_str, current_str_start, i)
+                
+                if (expecting_key == 1) {
+                    current_key = parsed_str
+                    expecting_key = 0
+                } else {
+                    current_val = parsed_str
+                    JsonObject_set(obj, current_key, current_val)
+                    expecting_key = 1
+                }
+            } else {
+                // Start of string
+                in_string = 1
+                current_str_start = i + 1
+            }
+        }
+        
+        i = i + 1
+    }
+    
+    return obj
+}

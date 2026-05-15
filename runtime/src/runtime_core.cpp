@@ -11,6 +11,9 @@
 #include <dlfcn.h>
 #include <pthread.h>
 #include <math.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 // Prevent C++ name mangling for Ardium
 extern "C" {
@@ -120,6 +123,36 @@ ssize_t __sys_write(int fd, const void* buf, size_t count) {
 
 off_t __sys_lseek(int fd, off_t offset, int whence) {
     return lseek(fd, offset, whence);
+}
+
+// ============================================================================
+// NETWORKING (BSD Sockets wrapper)
+// ============================================================================
+
+int __sys_socket() {
+    return socket(AF_INET, SOCK_STREAM, 0);
+}
+
+int __sys_bind(int fd, int port) {
+    int opt = 1;
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+    struct sockaddr_in address;
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(port);
+    
+    return bind(fd, (struct sockaddr*)&address, sizeof(address));
+}
+
+int __sys_listen(int fd, int backlog) {
+    return listen(fd, backlog);
+}
+
+int __sys_accept(int fd) {
+    struct sockaddr_in address;
+    socklen_t addrlen = sizeof(address);
+    return accept(fd, (struct sockaddr*)&address, &addrlen);
 }
 
 // ============================================================================

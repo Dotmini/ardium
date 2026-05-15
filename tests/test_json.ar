@@ -1,0 +1,27 @@
+import "Runtime/String"
+import "Runtime/Json"
+
+fn main() {
+    println("--- Testing Ardium JSON Parser ---");
+
+    let json_str = String_from_cstr("{\"name\": \"Ardium Engine\", \"version\": \"5.0\"}");
+    
+    print("Parsing JSON: ");
+    String_println(json_str);
+    
+    let obj = Json_parse(json_str);
+    
+    let name_key = String_from_cstr("name");
+    let version_key = String_from_cstr("version");
+    
+    let name_val = JsonObject_get(obj, name_key);
+    let version_val = JsonObject_get(obj, version_key);
+    
+    print("Extracted Name: ");
+    String_println(name_val);
+    
+    print("Extracted Version: ");
+    String_println(version_val);
+    
+    println("--- JSON Test Complete ---");
+}

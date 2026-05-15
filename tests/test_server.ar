@@ -1,0 +1,39 @@
+import "Runtime/Net"
+import "Runtime/String"
+
+fn main() {
+    println("--- Testing Ardium HTTP Server ---");
+    
+    let port = 8080
+    print("Binding to port ");
+    print_int(port);
+    
+    let listener = TcpListener_bind(port);
+    if (listener == 0) {
+        println("Server failed to start.");
+        return 1;
+    }
+    
+    println("Server is running! Open http://localhost:8080 in your browser.");
+    println("Waiting for connections...");
+    
+    // Accept 1 connection and then exit (for testing)
+    let client = TcpListener_accept(listener);
+    if (client != 0) {
+        println("Client connected!");
+        
+        let request = TcpStream_read_text(client);
+        print("Received Request:\n");
+        String_println(request);
+        
+        let response = String_from_cstr("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nHello from Ardium Native Web Server!");
+        
+        println("Sending response...");
+        TcpStream_write_text(client, response);
+        
+        TcpStream_close(client);
+        println("Client disconnected.");
+    }
+    
+    println("--- Server Test Complete ---");
+}

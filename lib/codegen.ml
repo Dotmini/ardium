@@ -300,6 +300,27 @@ module Builtins = struct
     match lookup_function "__sys_lseek" ctx.Context.the_module with
     | Some f -> f | None -> declare_function "__sys_lseek" ty ctx.Context.the_module
 
+  (* --- Networking Intrinsics --- *)
+  let get_or_declare_sys_socket ctx =
+    let ty = function_type (Types.i32_type ctx) [||] in
+    match lookup_function "__sys_socket" ctx.Context.the_module with
+    | Some f -> f | None -> declare_function "__sys_socket" ty ctx.Context.the_module
+
+  let get_or_declare_sys_bind ctx =
+    let ty = function_type (Types.i32_type ctx) [| Types.i32_type ctx; Types.i32_type ctx |] in
+    match lookup_function "__sys_bind" ctx.Context.the_module with
+    | Some f -> f | None -> declare_function "__sys_bind" ty ctx.Context.the_module
+
+  let get_or_declare_sys_listen ctx =
+    let ty = function_type (Types.i32_type ctx) [| Types.i32_type ctx; Types.i32_type ctx |] in
+    match lookup_function "__sys_listen" ctx.Context.the_module with
+    | Some f -> f | None -> declare_function "__sys_listen" ty ctx.Context.the_module
+
+  let get_or_declare_sys_accept ctx =
+    let ty = function_type (Types.i32_type ctx) [| Types.i32_type ctx |] in
+    match lookup_function "__sys_accept" ctx.Context.the_module with
+    | Some f -> f | None -> declare_function "__sys_accept" ty ctx.Context.the_module
+
   let get_or_declare_strcmp ctx =
     let strcmp_ty = function_type (Types.i32_type ctx)
                       [| Types.i8_ptr_type ctx; Types.i8_ptr_type ctx |] in
