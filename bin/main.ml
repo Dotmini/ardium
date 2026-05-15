@@ -157,7 +157,14 @@ let process_file input_path output_path =
 
   (* Combine flags *)
   let all_frameworks = framework_args ^ " " ^ coreui_libs in
-  let all_links = link_args ^ " " ^ coreui_flags ^ " -lsqlite3" in
+  
+  let raylib_flags = 
+    if Stdlib.Sys.file_exists "lib/libraylib.a" then
+      " -Llib -lraylib -framework OpenGL -framework IOKit -framework CoreVideo "
+    else ""
+  in
+
+  let all_links = link_args ^ " " ^ coreui_flags ^ " -lsqlite3" ^ raylib_flags in
 
   match Codegen.codegen_program ?triple ~output_file:bc_file "my_module" final_program with
   | Ok _llmodule ->
