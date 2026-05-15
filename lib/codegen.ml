@@ -234,6 +234,42 @@ module Builtins = struct
     | Some f -> f
     | None -> declare_function "__arc_release" ty ctx.Context.the_module
 
+  (* --- Error Handling Intrinsics --- *)
+  let get_or_declare_sys_throw ctx =
+    let ty = function_type (Types.void_type ctx) [| Types.i8_ptr_type ctx |] in
+    match lookup_function "__sys_throw" ctx.Context.the_module with
+    | Some f -> f
+    | None -> declare_function "__sys_throw" ty ctx.Context.the_module
+
+  let get_or_declare_sys_get_error ctx =
+    let ty = function_type (Types.i8_ptr_type ctx) [||] in
+    match lookup_function "__sys_get_error" ctx.Context.the_module with
+    | Some f -> f
+    | None -> declare_function "__sys_get_error" ty ctx.Context.the_module
+
+  let get_or_declare_sys_clear_error ctx =
+    let ty = function_type (Types.void_type ctx) [||] in
+    match lookup_function "__sys_clear_error" ctx.Context.the_module with
+    | Some f -> f
+    | None -> declare_function "__sys_clear_error" ty ctx.Context.the_module
+
+  (* --- Threading Intrinsics --- *)
+  let get_or_declare_pthread_create ctx =
+    (* int pthread_create(pthread_t *thread, const pthread_attr_t *attr, void *(*start_routine) (void *), void *arg); *)
+    let ty = function_type (Types.i32_type ctx) 
+        [| Types.i8_ptr_type ctx; Types.i8_ptr_type ctx; Types.i8_ptr_type ctx; Types.i8_ptr_type ctx |] in
+    match lookup_function "__sys_pthread_create" ctx.Context.the_module with
+    | Some f -> f
+    | None -> declare_function "__sys_pthread_create" ty ctx.Context.the_module
+
+  let get_or_declare_pthread_join ctx =
+    (* int pthread_join(pthread_t thread, void **retval); *)
+    let ty = function_type (Types.i32_type ctx) 
+        [| Types.i64_type ctx; Types.i8_ptr_type ctx |] in
+    match lookup_function "__sys_pthread_join" ctx.Context.the_module with
+    | Some f -> f
+    | None -> declare_function "__sys_pthread_join" ty ctx.Context.the_module
+
   let get_or_declare_strcmp ctx =
     let strcmp_ty = function_type (Types.i32_type ctx)
                       [| Types.i8_ptr_type ctx; Types.i8_ptr_type ctx |] in
@@ -501,8 +537,46 @@ module Expr = struct
         codegen_call ctx fname args
     | Tuple _ -> error "Tuple not implemented"
     | Named _ -> error "Named arguments not implemented"
-    | Async _ -> error "Async not implemented"
-    | Await _ -> error "Await not implemented"
+    | Async expr -> 
+        let task_name = Printf.sprintf "__async_task_%d" (Hashtbl.length ctx.Context.named_values + 1000) in
+        let fn_ty = function_type (Types.void_ptr_type ctx) [| Types.void_ptr_type ctx |] in
+        let task_fn = declare_function task_name fn_ty ctx.Context.the_module in
+        let bb = append_block ctx.Context.llvm_ctx "entry" task_fn in
+        
+        (* Save current insert block *)
+        let current_bb = insertion_block ctx.Context.builder in
+        
+        position_at_end bb ctx.Context.builder;
+        
+        (* Generate the expression in the new function *)
+        ignore (codegen ctx expr);
+        ignore (build_ret (const_null (Types.void_ptr_type ctx)) ctx.Context.builder);
+        
+        (* Restore builder position *)
+        position_at_end current_bb ctx.Context.builder;
+        
+        (* Call pthread_create *)
+        let pthread_create = Builtins.get_or_declare_pthread_create ctx in
+        let thread_ptr = build_alloca (Types.i64_type ctx) "thread_handle" ctx.Context.builder in
+        let null_attr = const_null (Types.i8_ptr_type ctx) in
+        let null_arg = const_null (Types.i8_ptr_type ctx) in
+        let fn_cast = build_bitcast task_fn (Types.i8_ptr_type ctx) "fn_cast" ctx.Context.builder in
+        
+        let thread_ptr_cast = build_bitcast thread_ptr (Types.i8_ptr_type ctx) "tptr_cast" ctx.Context.builder in
+        let pc_ty = function_type (Types.i32_type ctx) 
+            [| Types.i8_ptr_type ctx; Types.i8_ptr_type ctx; Types.i8_ptr_type ctx; Types.i8_ptr_type ctx |] in
+        ignore (build_call pc_ty pthread_create [| thread_ptr_cast; null_attr; fn_cast; null_arg |] "" ctx.Context.builder);
+        
+        build_load (Types.i64_type ctx) thread_ptr "thread_id" ctx.Context.builder
+
+    | Await expr ->
+        let handle = codegen ctx expr in
+        let pthread_join = Builtins.get_or_declare_pthread_join ctx in
+        let null_retval = const_null (pointer_type ctx.Context.llvm_ctx) in
+        let pj_ty = function_type (Types.i32_type ctx) 
+            [| Types.i64_type ctx; Types.i8_ptr_type ctx |] in
+        ignore (build_call pj_ty pthread_join [| handle; null_retval |] "" ctx.Context.builder);
+        const_int (Types.i64_type ctx) 0
     | MemberCall _ -> error "MemberCall not implemented"
     | Lambda _ -> error "Lambda not implemented"
     | StructInit _ -> error "StructInit not implemented"
@@ -832,8 +906,54 @@ module Stmt = struct
         Context.add_named_value ctx name alloca var_type
 
     | TryCatch (try_block, err_name, catch_block) ->
-        (* Try-Catch stub for MVP: execute try block synchronously for now *)
-        List.iter (fun stmt -> ignore (codegen ctx func_val stmt)) try_block
+        let clear_fn = Builtins.get_or_declare_sys_clear_error ctx in
+        let clear_ty = function_type (Types.void_type ctx) [||] in
+        ignore (build_call clear_ty clear_fn [||] "" ctx.Context.builder);
+
+        let try_bb = append_block ctx.Context.llvm_ctx "try_block" func_val in
+        let catch_bb = append_block ctx.Context.llvm_ctx "catch_block" func_val in
+        let merge_bb = append_block ctx.Context.llvm_ctx "try_merge" func_val in
+
+        ignore (build_br try_bb ctx.Context.builder);
+        position_at_end try_bb ctx.Context.builder;
+        
+        List.iter (fun stmt -> ignore (codegen ctx func_val stmt)) try_block;
+
+        let get_fn = Builtins.get_or_declare_sys_get_error ctx in
+        let get_ty = function_type (Types.i8_ptr_type ctx) [||] in
+        let err_ptr = build_call get_ty get_fn [||] "err_ptr" ctx.Context.builder in
+        
+        let null_ptr = const_null (Types.i8_ptr_type ctx) in
+        let has_err = build_icmp Icmp.Ne err_ptr null_ptr "has_err" ctx.Context.builder in
+        
+        ignore (build_cond_br has_err catch_bb merge_bb ctx.Context.builder);
+
+        position_at_end catch_bb ctx.Context.builder;
+        let alloca = build_alloca (Types.i8_ptr_type ctx) err_name ctx.Context.builder in
+        ignore (build_store err_ptr alloca ctx.Context.builder);
+        Context.add_named_value ctx err_name alloca (Types.i8_ptr_type ctx);
+        
+        List.iter (fun stmt -> ignore (codegen ctx func_val stmt)) catch_block;
+        ignore (build_call clear_ty clear_fn [||] "" ctx.Context.builder); (* Clear after catch *)
+        ignore (build_br merge_bb ctx.Context.builder);
+
+        position_at_end merge_bb ctx.Context.builder
+
+    | Err err_opt ->
+        let throw_fn = Builtins.get_or_declare_sys_throw ctx in
+        let throw_ty = function_type (Types.void_type ctx) [| Types.i8_ptr_type ctx |] in
+        let err_str = match err_opt with
+          | Some s ->
+              let str_val = const_stringz ctx.Context.llvm_ctx s in
+              let g = define_global "err_str" str_val ctx.Context.the_module in
+              set_global_constant true g;
+              set_unnamed_addr true g;
+              set_linkage Linkage.Internal g;
+              let zero = const_int (Types.i32_type ctx) 0 in
+              const_in_bounds_gep (type_of str_val) g [| zero; zero |]
+          | None -> const_null (Types.i8_ptr_type ctx)
+        in
+        ignore (build_call throw_ty throw_fn [| err_str |] "" ctx.Context.builder)
 
     | Assign (lhs, rhs) -> begin
         match lhs with
@@ -901,9 +1021,29 @@ module Stmt = struct
         end
 
     | Spawn body ->
-        (* Simulated Spawn for now: Executes body sequentially in this thread *)
-        (* Ideally: call void @titan_spawn_task(void (i8 ptr) ptr @task_func, i8 ptr %data) *)
-        List.iter (codegen ctx func_val) body
+        let task_name = Printf.sprintf "__spawn_task_%d" (Hashtbl.length ctx.Context.named_values + 2000) in
+        let fn_ty = function_type (Types.void_ptr_type ctx) [| Types.void_ptr_type ctx |] in
+        let task_fn = declare_function task_name fn_ty ctx.Context.the_module in
+        let bb = append_block ctx.Context.llvm_ctx "entry" task_fn in
+        
+        let current_bb = insertion_block ctx.Context.builder in
+        position_at_end bb ctx.Context.builder;
+        
+        List.iter (fun stmt -> ignore (codegen ctx task_fn stmt)) body;
+        ignore (build_ret (const_null (Types.void_ptr_type ctx)) ctx.Context.builder);
+        
+        position_at_end current_bb ctx.Context.builder;
+        
+        let pthread_create = Builtins.get_or_declare_pthread_create ctx in
+        let thread_ptr = build_alloca (Types.i64_type ctx) "thread_handle" ctx.Context.builder in
+        let null_attr = const_null (Types.i8_ptr_type ctx) in
+        let null_arg = const_null (Types.i8_ptr_type ctx) in
+        let fn_cast = build_bitcast task_fn (Types.i8_ptr_type ctx) "fn_cast" ctx.Context.builder in
+        let thread_ptr_cast = build_bitcast thread_ptr (Types.i8_ptr_type ctx) "tptr_cast" ctx.Context.builder in
+        
+        let pc_ty = function_type (Types.i32_type ctx) 
+            [| Types.i8_ptr_type ctx; Types.i8_ptr_type ctx; Types.i8_ptr_type ctx; Types.i8_ptr_type ctx |] in
+        ignore (build_call pc_ty pthread_create [| thread_ptr_cast; null_attr; fn_cast; null_arg |] "" ctx.Context.builder)
 
     | VClass body ->
         ignore (build_call (function_type (void_type ctx.Context.llvm_ctx) [| i32_type ctx.Context.llvm_ctx |])

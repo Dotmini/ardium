@@ -71,6 +71,34 @@ void* __sys_memset(void* s, int c, size_t n) {
 }
 
 // ============================================================================
+// ERROR HANDLING (Thread-Local State for MVP Try/Catch)
+// ============================================================================
+
+thread_local char* __ardium_last_error = NULL;
+
+void __sys_throw(const char* err) {
+    if (__ardium_last_error) {
+        free(__ardium_last_error);
+    }
+    if (err) {
+        __ardium_last_error = strdup(err);
+    } else {
+        __ardium_last_error = strdup("Unknown Error");
+    }
+}
+
+const char* __sys_get_error() {
+    return __ardium_last_error;
+}
+
+void __sys_clear_error() {
+    if (__ardium_last_error) {
+        free(__ardium_last_error);
+        __ardium_last_error = NULL;
+    }
+}
+
+// ============================================================================
 // FILE I/O (Syscall wrappers only)
 // ============================================================================
 

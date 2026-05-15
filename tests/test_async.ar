@@ -1,0 +1,13 @@
+fn main() {
+    println("Starting Async Test...");
+
+    let task = async {
+        println("Inside Background Task");
+    };
+
+    println("Inside Main Thread");
+    
+    await task;
+
+    println("Finished Async Test.");
+}

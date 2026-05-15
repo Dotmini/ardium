@@ -1,4 +1,14 @@
-// tests/test_error.ar
 fn main() {
-    let x = ; // Syntax error
+    println("Starting Try/Catch Test...");
+
+    try {
+        println("Inside Try Block");
+        err("Simulated Error Occurred!");
+        println("This should not be printed");
+    } catch(e) {
+        print("Caught Error: ");
+        println(e);
+    }
+
+    println("Finished Try/Catch Test.");
 }
