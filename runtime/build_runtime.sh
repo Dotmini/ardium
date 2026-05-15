@@ -31,6 +31,7 @@ if [ "$OS" == "Darwin" ]; then
             "$BUILD_DIR/runtime_core.o" \
             "$BUILD_DIR/runtime_common.o" \
             -L/usr/lib/swift \
+            -lsqlite3 \
             -install_name "@rpath/libardium.dylib"
     else
         clang++ -dynamiclib -o "$OUTPUT_LIB" \
@@ -40,6 +41,7 @@ if [ "$OS" == "Darwin" ]; then
             "$BUILD_DIR/SwiftUIBridge.o" \
             -framework Cocoa -framework Foundation -framework SwiftUI -framework Metal \
             -L/usr/lib/swift \
+            -lsqlite3 \
             -install_name "@rpath/libardium.dylib"
     fi
         
@@ -61,7 +63,7 @@ elif [ "$OS" == "Linux" ]; then
         "$BUILD_DIR/runtime_core.o" \
         "$BUILD_DIR/runtime_common.o" \
         "$BUILD_DIR/runtime_gui_stubs.o" \
-        -lpthread -ldl -lm
+        -lpthread -ldl -lm -lsqlite3
         
     OUTPUT_NAME="libardium.so"
 elif [[ "$OS" == *"MINGW"* ]] || [[ "$OS" == *"CYGWIN"* ]] || [[ "$OS" == *"MSYS"* ]]; then
@@ -73,7 +75,7 @@ elif [[ "$OS" == *"MINGW"* ]] || [[ "$OS" == *"CYGWIN"* ]] || [[ "$OS" == *"MSYS
         clang++ -c -o "$BUILD_DIR/runtime_core.o" "$RUNTIME_SRC/runtime_core.cpp" -std=c++17
         clang++ -c -o "$BUILD_DIR/runtime_common.o" "$RUNTIME_SRC/runtime_common.cpp" -std=c++17
         clang++ -c -o "$BUILD_DIR/runtime_gui_stubs.o" "$RUNTIME_SRC/runtime_gui_stubs.cpp" -std=c++17
-        clang++ -shared -o "$OUTPUT_LIB" "$BUILD_DIR/runtime_core.o" "$BUILD_DIR/runtime_common.o" "$BUILD_DIR/runtime_gui_stubs.o"
+        clang++ -shared -o "$OUTPUT_LIB" "$BUILD_DIR/runtime_core.o" "$BUILD_DIR/runtime_common.o" "$BUILD_DIR/runtime_gui_stubs.o" -lsqlite3
         OUTPUT_NAME="libardium.dll"
     else
         echo "⚠️ clang++ not found on Windows. Creating a dummy file so build can continue."
