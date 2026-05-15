@@ -1,0 +1,14 @@
+extern fn printf(fmt, ...);
+extern fn malloc(size);
+
+fn main() {
+    let msg = "Hello from Ardium variadic! %d + %d = %d\n";
+    printf(msg, 10, 20, 30);
+    
+    let float_msg = "Float values: %.2f, %.2f\n";
+    // For now, our variadic support promotes to i64. 
+    // Passing floats to variadic in C usually promotes to double.
+    // Our compiler should handle this or we use i64 for raw bits.
+    
+    return 0;
+}

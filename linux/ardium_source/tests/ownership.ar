@@ -1,0 +1,18 @@
+extern fn calloc(count, size);
+extern fn free(ptr);
+
+fn main() {
+    if (1) {
+        @owned var ptr = calloc(1, 100);
+        // implicit free(ptr) happens here
+    }
+    
+    i = 0;
+    while (i < 5) {
+        @owned var x = calloc(1, 50);
+        i = i + 1;
+        // implicit free(x) happens here
+    }
+    
+    return 0;
+}

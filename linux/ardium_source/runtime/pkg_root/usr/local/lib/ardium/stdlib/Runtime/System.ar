@@ -1,0 +1,71 @@
+// stdlib/Runtime/System.ar
+// Ardium Self-Hosting Runtime: System Utilities
+// Pure Ardium OS helpers
+
+// Get process ID
+fn getpid() -> int {
+    return __sys_getpid()
+}
+
+// Exit process
+fn exit(code: int) {
+    // TODO: Cleanup resources before exit
+    Memory_destroy()
+    __sys_exit(code)
+}
+
+// Command line arguments (to be implemented)
+struct Args {
+    argc: int
+    argv: int
+}
+
+let PROGRAM_ARGS = 0
+
+fn Args_init(argc: int, argv: int) {
+    let args = alloc(16)
+    __builtin_poke(args + 0, argc)
+    __builtin_poke(args + 8, argv)
+    PROGRAM_ARGS = args
+}
+
+fn Args_count() -> int {
+    if (PROGRAM_ARGS == 0) {
+        return 0
+    }
+    return __builtin_peek(PROGRAM_ARGS + 0)
+}
+
+fn Args_get(index: int) -> int {
+    if (PROGRAM_ARGS == 0) {
+        return 0
+    }
+    
+    let argc = __builtin_peek(PROGRAM_ARGS + 0)
+    if (index >= argc) {
+        return 0
+    }
+    
+    let argv = __builtin_peek(PROGRAM_ARGS + 8)
+    let arg_ptr = __builtin_peek(argv + (index * 8))
+    
+    return String_from_cstr(arg_ptr)
+}
+
+// Environment variables
+fn getenv(name: int) -> int {
+    // TODO: Parse environment
+    return 0
+}
+
+// Sleep (milliseconds)
+fn sleep_ms(ms: int) {
+    // TODO: Implement using nanosleep or usleep
+    return 0
+}
+
+// Current time (Unix timestamp)
+fn time_now() -> int {
+    // TODO: Implement using clock_gettime
+    return 0
+}

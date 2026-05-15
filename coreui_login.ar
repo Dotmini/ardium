@@ -1,0 +1,37 @@
+import "CoreUI"
+
+fn main() {
+    print("🚀 App starting... (Imperative Login Demo)\n")
+    
+    // Initialize
+    agui()
+    
+    // Window
+    viewer("SPU AI Club Login", 100, 100, 400, 600)
+    background()
+    
+    // UI Elements (Simulating Vertical Stack)
+    print("🎨 Drawing UI...\n")
+    
+    // Title
+    text("SPU AI CLUB", 24, 1)
+    
+    // Subtitle
+    text("Member Login", 18, 0)
+    
+    // Spacer (Implicit in simple simulated layout or just ignored by current stub)
+    
+    // Fields
+    add_textfield("Username", 0)
+    add_textfield("Password", 1) // Secure
+    
+    // Button
+    // Passing 0 as callback for now since we don't have simulated callbacks in the stub yet
+    add_button("Login", 0)
+    
+    // Run
+    print("🏁 Starting Event Loop...\n")
+    run_apple_gui()
+    
+    return 0
+}

@@ -1,0 +1,21 @@
+// Topic: Advanced Global Scope
+// Manage Global State with Scoped Access
+
+extern fn printf(fmt: string, val: string);
+
+GLOBAL(AppState) = (status="Active", users=0);
+
+fn main() {
+    // Standard access
+    @GLOBAL(AppState): {
+        printf("Current Status: %s\n", status);
+        // Modify Global directly in this scope
+        status = "Maintenance";
+    }
+    
+    // Status is persisted
+    @GLOBAL(AppState): {
+        printf("New Status: %s\n", status);
+    }
+    return 0;
+}

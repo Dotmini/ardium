@@ -1,0 +1,30 @@
+import "Core"
+
+@External("libardium")
+extern fn __sys_fetch_url(url);
+
+@External("libardium")
+extern fn __sys_json_extract(json_handle, key);
+
+@External("libardium")
+extern fn __sys_get_time();
+
+fn Fetch(url) {
+    // Mock implementation for now, or calls runtime
+    println("Fetching " + url + "...");
+    return "{rate: $45,000.00}"; // Mock JSON (simplified)
+}
+
+fn json_extract(json, key) {
+    // Simple string search mock
+    return "45,000.00"; 
+}
+
+fn get_current_time() {
+    return "12:00 PM";
+}
+
+fn exit_app() {
+    // Exit
+    return 0;
+}

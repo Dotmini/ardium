@@ -1,0 +1,181 @@
+// stdlib/Runtime/ARC.ar
+// Ardium Self-Hosting Runtime: Automatic Reference Counting
+// Pure Ardium implementation (Apple-style ARC + Rust ownership)
+
+import "Runtime/Memory"
+
+// Reference counted object header
+// ┌─────────────┬──────────────┬─────────────┐
+// │ RefCount(8) │ TypeInfo(8)  │ Data...     │
+// └─────────────┴──────────────┴─────────────┘
+
+let ARC_HEADER_SIZE = 16
+
+// Allocate reference counted object
+fn ARC_alloc(size: int, type_id: int) -> int {
+    let total_size = size + ARC_HEADER_SIZE
+    let header = __sys_malloc(total_size)
+    
+    if (header == 0) {
+        return 0  // Out of memory
+    }
+    
+    // Initialize header
+    __builtin_poke(header + 0, 1)         // refcount = 1
+    __builtin_poke(header + 8, type_id)  // type_id
+    
+    // Zero out data section
+    __sys_memset(header + ARC_HEADER_SIZE, 0, size)
+    
+    return header + ARC_HEADER_SIZE  // Return data pointer
+}
+
+// Increment reference count
+fn ARC_retain(ptr: int) {
+    if (ptr == 0) {
+        return 0
+    }
+    
+    let header = ptr - ARC_HEADER_SIZE
+    let count = __builtin_peek(header + 0)
+    __builtin_poke(header + 0, count + 1)
+    
+    return 0
+}
+
+// Decrement reference count, free if zero
+fn ARC_release(ptr: int) {
+    if (ptr == 0) {
+        return 0
+    }
+    
+    let header = ptr - ARC_HEADER_SIZE
+    let count = __builtin_peek(header + 0)
+    
+    if (count <= 1) {
+        // Ref count reached zero - free memory
+        __sys_free(header)
+    } else {
+        // Decrement ref count
+        __builtin_poke(header + 0, count - 1)
+    }
+    
+    return 0
+}
+
+// Get current reference count
+fn ARC_count(ptr: int) -> int {
+    if (ptr == 0) {
+        return 0
+    }
+    
+    let header = ptr - ARC_HEADER_SIZE
+    return __builtin_peek(header + 0)
+}
+
+// Get type ID
+fn ARC_type_id(ptr: int) -> int {
+    if (ptr == 0) {
+        return 0
+    }
+    
+    let header = ptr - ARC_HEADER_SIZE
+    return __builtin_peek(header + 8)
+}
+
+// Smart pointer wrapper (Rc<T>)
+struct Rc {
+    ptr: int
+}
+
+fn Rc_new(size: int, type_id: int) -> int {
+    let data_ptr = ARC_alloc(size, type_id)
+    if (data_ptr == 0) {
+        return 0
+    }
+    
+    let rc = alloc(8)  // sizeof(Rc)
+    __builtin_poke(rc + 0, data_ptr)
+    return rc
+}
+
+fn Rc_clone(rc: int) -> int {
+    let ptr = __builtin_peek(rc + 0)
+    ARC_retain(ptr)
+    
+    let new_rc = alloc(8)
+    __builtin_poke(new_rc + 0, ptr)
+    return new_rc
+}
+
+fn Rc_get(rc: int) -> int {
+    return __builtin_peek(rc + 0)
+}
+
+fn Rc_drop(rc: int) {
+    let ptr = __builtin_peek(rc + 0)
+    ARC_release(ptr)
+}
+
+// Weak reference (doesn't keep object alive)
+struct Weak {
+    ptr: int
+    valid: int
+}
+
+fn Weak_new(rc: int) -> int {
+    let ptr = Rc_get(rc)
+    
+    let weak = alloc(16)  // sizeof(Weak)
+    __builtin_poke(weak + 0, ptr)
+    __builtin_poke(weak + 8, 1)  // valid = true
+    return weak
+}
+
+fn Weak_upgrade(weak: int) -> int {
+    let ptr = __builtin_peek(weak + 0)
+    let valid = __builtin_peek(weak + 8)
+    
+    if (valid == 0) {
+        return 0  // Object was deallocated
+    }
+    
+    if (ptr == 0) {
+        return 0
+    }
+    
+    // Check if still alive (refcount > 0)
+    let count = ARC_count(ptr)
+    if (count > 0) {
+        return Rc_new_from_ptr(ptr)
+    }
+    
+    // Mark as invalid
+    __builtin_poke(weak + 8, 0)
+    return 0
+}
+
+fn Rc_new_from_ptr(ptr: int) -> int {
+    ARC_retain(ptr)
+    let rc = alloc(8)
+    __builtin_poke(rc + 0, ptr)
+    return rc
+}
+
+// Example usage:
+//
+// fn example() {
+//     // Create reference counted object
+//     let obj = Rc_new(1024, 1)
+//     
+//     // Clone creates another reference
+//     let obj2 = Rc_clone(obj)
+//     
+//     // Access data
+//     let data = Rc_get(obj)
+//     __builtin_poke(data, 42)
+//     
+//     // Cleanup (automatic in real usage)
+//     Rc_drop(obj)   // Refcount: 2 -> 1
+//     Rc_drop(obj2)  // Refcount: 1 -> 0, freed
+// }

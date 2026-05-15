@@ -1,0 +1,49 @@
+// stdlib/CoreMath.ar - Native Math Implementation (v1)
+
+fn abs(n) {
+    if (n < 0) { return 0 - n; }
+    return n;
+}
+
+fn min(a, b) {
+    if (a < b) { return a; }
+    return b;
+}
+
+fn max(a, b) {
+    if (a > b) { return a; }
+    return b;
+}
+
+fn pow(b, e) {
+    return __sys_pow(b, e);
+}
+
+fn matmul(A, B, C, N) {
+    let i = 0;
+    while (i < N) {
+        let j = 0;
+        while (j < N) {
+            let sum = 0.0;
+            
+            let k = 0;
+            while (k < N) {
+                let a_idx = (i * N + k) * 8;
+                let b_idx = (k * N + j) * 8;
+                
+                let val_a = __builtin_peek(A + a_idx);
+                let val_b = __builtin_peek(B + b_idx);
+                
+                sum = sum + (val_a * val_b);
+                
+                k = k + 1;
+            }
+            
+            let c_idx = (i * N + j) * 8;
+            __builtin_poke(C + c_idx, sum);
+            
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+}

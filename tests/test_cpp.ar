@@ -1,0 +1,8 @@
+import "CoreString"
+
+fn main() {
+    println("Testing C++ Runtime...");
+    let s = concat("Hello ", "C++");
+    println(s);
+    return 0;
+}

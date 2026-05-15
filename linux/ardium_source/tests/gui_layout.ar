@@ -1,0 +1,17 @@
+// import "GUI"
+
+fn main() {
+    init_gui();
+    create_window("Ardium Layout Test", 400, 300);
+
+    // Main VSTACK
+    vstack(20, 1, fn() { 
+        Text("Hello from VStack!");
+        Button("Button 1");
+        Button("Button 2");
+        TextField("Input");
+    });
+
+    run_gui();
+    return 0;
+}

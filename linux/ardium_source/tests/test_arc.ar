@@ -1,0 +1,60 @@
+// tests/test_arc.ar - Self-contained ARC Test
+
+import "Runtime/ARC"
+
+fn main() {
+    __sys_print("Testing ARC Memory Management\n");
+    
+    // Test 1: ARC_alloc
+    __sys_print("Test 1: Alloc\n");
+    let ptr = ARC_alloc(32, 100); // 32 bytes, type_id 100
+    if (ptr == 0) {
+        __sys_print("Alloc Failed\n");
+        return 1;
+    }
+    
+    let c = ARC_count(ptr);
+    __sys_print("Refcount: ");
+    print_int(c); // Should be 1
+    __sys_print("\n");
+    
+    if (c == 1) { __sys_print("Alloc OK\n"); } else { __sys_print("Alloc FAIL\n"); }
+    
+    let type_id = ARC_type_id(ptr);
+    __sys_print("TypeID: ");
+    print_int(type_id); // Should be 100
+    __sys_print("\n");
+    
+    // Test 2: Retain
+    __sys_print("Test 2: Retain\n");
+    ARC_retain(ptr);
+    let c2 = ARC_count(ptr);
+    __sys_print("Refcount: ");
+    print_int(c2); // Should be 2
+    __sys_print("\n");
+    
+    if (c2 == 2) { __sys_print("Retain OK\n"); } else { __sys_print("Retain FAIL\n"); }
+    
+    // Test 3: Release
+    __sys_print("Test 3: Release\n");
+    ARC_release(ptr);
+    let c3 = ARC_count(ptr);
+    __sys_print("Refcount: ");
+    print_int(c3); // Should be 1
+    __sys_print("\n");
+
+    if (c3 == 1) { __sys_print("Release OK\n"); } else { __sys_print("Release FAIL\n"); }
+    
+    // Release final
+    ARC_release(ptr);
+    // ptr is now dangling/freed.
+    // Memory.ar (subset) doesn't track freed memory in allocator map (it's arena based or sys_free based).
+    // Our subset implementation uses __sys_free on header if it was single alloc? No.
+    // Memory.ar alloc uses Arena. Arena_alloc returns pointer into arena.
+    // ARC_alloc uses __sys_malloc directly! (Line 10 of fixed ARC.ar). (Reference: previous file content).
+    // Wait. My fixed ARC.ar uses __sys_malloc.
+    // So __sys_free used in ARC_release (Line 52) works!
+    
+    __sys_print("Tests Completed\n");
+    return 0;
+}

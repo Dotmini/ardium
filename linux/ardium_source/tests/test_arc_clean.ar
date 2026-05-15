@@ -1,0 +1,28 @@
+// tests/test_arc_clean.ar
+
+fn main() {
+    __sys_print("ARC Clean Test\n")
+    
+    let a = 1
+    if (a == 1) {
+        __sys_print("Basic OK\n")
+    }
+    
+    let ptr = alloc_node(10)
+    if (ptr != 0) {
+        free_node(ptr)
+        __sys_print("Alloc/Free OK\n")
+    }
+    
+    return 0
+}
+
+fn alloc_node(size) {
+    let p = __sys_malloc(size)
+    return p
+}
+
+fn free_node(p) {
+    __sys_free(p)
+    return 0
+}

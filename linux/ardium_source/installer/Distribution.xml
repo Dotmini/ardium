@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="1">
+    <title>Ardium Compiler 2.2</title>
+    <organization>com.dotmini.ardium</organization>
+    <domains enable_localSystem="true"/>
+    <options customize="never" require-scripts="true" rootVolumeOnly="true" />
+    
+    <welcome file="welcome.html" mime-type="text/html" />
+    <license file="license.txt" mime-type="text/plain" />
+    <readme file="readme.html" mime-type="text/html" />
+    
+    <pkg-ref id="com.dotmini.ardium.compiler">
+        <bundle-version>
+            <bundle id="com.dotmini.ardium" CFBundleVersion="2.2.0" path="/usr/local/ardium"/>
+        </bundle-version>
+    </pkg-ref>
+    
+    <choices-outline>
+        <line choice="default">
+            <line choice="com.dotmini.ardium.compiler"/>
+        </line>
+    </choices-outline>
+    
+    <choice id="default"/>
+    <choice id="com.dotmini.ardium.compiler" visible="false">
+        <pkg-ref id="com.dotmini.ardium.compiler"/>
+    </choice>
+    
+    <pkg-ref id="com.dotmini.ardium.compiler" version="2.2.0" onConclusion="none">ardium-component.pkg</pkg-ref>
+</installer-gui-script>

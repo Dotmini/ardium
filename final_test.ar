@@ -1,0 +1,16 @@
+fn main() {
+    let x = 100;
+    println("Starting UI Test");
+    VClass {
+        Button("Vertical Button 1")
+        Button("Vertical Button 2")
+    }
+    HClass {
+        Button("Left")
+        Button("Right")
+    }
+    ZClass {
+        Button("Bottom Layer")
+        Button("Top Layer")
+    }
+}

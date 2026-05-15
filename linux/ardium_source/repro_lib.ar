@@ -1,0 +1,3 @@
+print("Lib Step 1\n")
+GLOBAL(LibConfig) = (x=1)
+print("Lib Step 2\n")

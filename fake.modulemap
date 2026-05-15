@@ -1,0 +1,4 @@
+module fake {
+  header "fake.h"
+  export *
+}

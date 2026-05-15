@@ -1,0 +1,4 @@
+module test_ascension {
+  header "debug_app.h"
+  export *
+}

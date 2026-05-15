@@ -1,0 +1,17 @@
+// Topic: Recursion
+// Calculate Fibonacci(10)
+
+extern fn printf(fmt: string, val: int);
+
+fn fib(n) {
+    if (n < 2) {
+        return n;
+    }
+    return fib(n - 1) + fib(n - 2);
+}
+
+fn main() {
+    var result = fib(10);
+    printf("Fibonacci(10) = %d\n", result);
+    return 0;
+}

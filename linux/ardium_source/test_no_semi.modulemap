@@ -1,0 +1,4 @@
+module test_no_semi {
+  header "test_no_semi.h"
+  export *
+}

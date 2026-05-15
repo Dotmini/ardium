@@ -1,0 +1,64 @@
+// stdlib/CoreUI.ar - Ardium CoreUI Framework
+
+fn View() { return 0 }
+
+fn Title(text) {
+    add_auto_text(text, 24, 1)
+}
+
+fn Subtitle(text) {
+    add_auto_text(text, 18, 0)
+}
+
+fn Text(text) {
+    add_auto_text(text, 14, 0)
+}
+
+fn Button(label, callback) {
+    add_button(label, callback)
+}
+
+fn TextField(placeholder) {
+    return add_textfield(placeholder, 0)
+}
+
+fn SecureField(placeholder) {
+    return add_textfield(placeholder, 1)
+}
+
+fn Image(path) {
+    add_image(path)
+}
+
+fn VStack(body_func) {
+    begin_vstack()
+    body_func()
+    end_stack()
+}
+
+fn HStack(body_func) {
+    begin_hstack()
+    body_func()
+    end_stack()
+}
+
+fn App(name, body_func) {
+    agui()
+    viewer(name, 100, 100, 400, 600)
+    background()
+    body_func()
+    run_apple_gui()
+}
+
+fn Spacer(size) {
+    add_spacer(size)
+}
+
+fn Padding(p) {
+    set_padding(p)
+}
+
+fn ZStack(body_func) {
+    // Basic stacking by overlapping
+    body_func()
+}

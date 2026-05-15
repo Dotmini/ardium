@@ -1,0 +1,4 @@
+module main {
+  header "main_test.h"
+  export *
+}

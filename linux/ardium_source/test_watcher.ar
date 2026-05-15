@@ -1,0 +1,11 @@
+fn main() {
+    @GLOBAL(Info): {
+        println(999);
+    }
+    
+    println(1);
+    GLOBAL.Info = 10;
+    println(2);
+    
+    return 0;
+}

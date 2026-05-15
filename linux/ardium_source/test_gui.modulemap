@@ -1,0 +1,4 @@
+module test_gui {
+  header "test_gui.h"
+  export *
+}

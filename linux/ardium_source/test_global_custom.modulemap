@@ -1,0 +1,4 @@
+module test_global_custom {
+  header "test_global_custom.h"
+  export *
+}

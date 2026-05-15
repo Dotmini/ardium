@@ -1,0 +1,26 @@
+import "CoreUI"
+
+fn main() {
+    print("🚀 Starting CoreUI Simple Demo...\n")
+    
+    // Initialize CoreUI (Metal)
+    agui()
+    
+    // Create Window
+    viewer("Ardium CoreUI", 100, 100, 800, 600)
+    
+    // Set Background
+    background()
+    
+    // Add some widgets (Imperative Style)
+    text("Hello, CoreUI!", 24, 1)
+    
+    add_button("Click Me", 0)
+    
+    add_textfield("Enter Name", 0)
+    
+    print("🏁 Entering Run Loop...\n")
+    run_apple_gui()
+    
+    return 0
+}

@@ -1,0 +1,75 @@
+import "Core"
+
+// Wrappers
+fn Title(t) { 
+    text(t, 24, 1) 
+}
+fn Subtitle(t) { 
+    text(t, 18, 0) 
+}
+fn Text(t) { 
+    text(t, 14, 0) 
+}
+
+fn Button(label, cb) {
+    add_button(label, cb)
+}
+
+fn Image(src) {
+    print("🌅 Image wrapper called: " + src + "\n")
+    add_image(src)
+}
+
+fn TextField(placeholder) {
+    add_textfield(placeholder, 0) // 0=Normal
+}
+
+fn SecureField(placeholder) {
+    add_textfield(placeholder, 1) // 1=Secure
+}
+
+// Global Pointers (Initialize to 0)
+// We use them to store handles to TextFields
+let user_ptr = 0
+let pass_ptr = 0
+
+fn on_login_click() {
+    print("🖱️ Login Button Clicked!\n")
+    
+    // Read Global Pointers
+    let u_handle = peek(resolve_symbol("user_ptr"))
+    let p_handle = peek(resolve_symbol("pass_ptr"))
+    
+    let u_text = get_input_value(u_handle)
+    let p_text = get_input_value(p_handle)
+    
+    print("👤 User: " + u_text + "\n")
+    print("🔑 Pass: " + p_text + "\n")
+    
+    if (u_text == "admin") {
+        print("✅ Access Granted!\n")
+    } else {
+        print("❌ Access Denied!\n")
+    }
+}
+
+let View = 0
+
+@VClass class LoginScreen(View) {
+    print("📍 Inside LoginScreen\n")
+    Title("SPU AI CLUB")
+}
+
+fn main() {
+    print("🚀 App starting...\n")
+    agui()
+    print("🖼️ Opening window...\n")
+    viewer("SPU AI Club", 100, 100, 400, 600)
+    print("🎨 Setting background...\n")
+    background()
+    print("📱 Loading LoginScreen...\n")
+    LoginScreen()
+    print("🏁 Starting GUI loop...\n")
+    run_apple_gui()
+    return 0
+}

@@ -1,0 +1,4 @@
+module test_global_msg {
+  header "test_global_msg.h"
+  export *
+}

@@ -1,0 +1,6 @@
+extern fn CoreUI_Init();
+
+fn main() {
+    CoreUI_Init();
+    return 0;
+}

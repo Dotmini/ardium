@@ -1,0 +1,4 @@
+module bench {
+  header "bench.h"
+  export *
+}

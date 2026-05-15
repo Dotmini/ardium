@@ -1,0 +1,72 @@
+// --- Ardium v3.2: Hybrid Physics & AI Simulation ---
+// Architect: Major
+// Goal: 1,000 Particles, Physics (MT), AI (Async), Native GUI.
+
+// 1. Runtime API
+extern fn coreui_init_app();
+extern fn coreui_create_system(count, w, h) -> i64;
+extern fn coreui_create_canvas(sys_id, w, h) -> i64;
+extern fn coreui_create_host_window(title, canvas_id) -> i64;
+extern fn coreui_start_timer(ms);
+extern fn coreui_run_loop();
+
+// 2. Kernels
+extern fn coreui_update_physics(sys_id);
+extern fn coreui_run_ai(sys_id);
+extern fn coreui_redraw_canvas(view_id);
+
+// Global State (Simulated via Closure/Global var pattern in Ardium)
+// Since Ardium variables are currently function-scoped or limited global support, 
+// we will rely on ID persistence.
+// Ideally: global let sys_id = ...
+
+fn main() {
+    println("--- [Major] Initializing Ardium v3.2 Simulation ---");
+    
+    coreui_init_app();
+
+    // 1. Create Data (Ownership)
+    println("[Ardium] Spawning 1,000 Particles (Ownership Managed)...");
+    let sys_id = coreui_create_system(1000, 600.0, 600.0);
+
+    // 2. Create UI (ARC)
+    println("[Ardium] Constructing Visualization Canvas...");
+    let canvas_id = coreui_create_canvas(sys_id, 600.0, 600.0);
+    
+    let win_id = coreui_create_host_window("Ardium v3.2: Physics & AI", canvas_id);
+
+    // 3. Start Game Loop
+    // The C++ runtime will call 'on_tick()' every 16ms (60 FPS)
+    println("[Ardium] Starting High-Performance Loop (16ms)...");
+    coreui_start_timer(16.0);
+
+    // 4. Enter Run Loop
+    coreui_run_loop();
+
+    return 0;
+}
+
+// --- Callback Handler ---
+// This function is called by the C++ Runtime Timer
+fn on_tick() {
+    // We hardcode IDs here because Ardium globals aren't fully flexible in this demo env
+    // Assumption: sys_id=1, canvas_id=1
+    let sys_id = 1;
+    let canvas_id = 1;
+
+    // 1. Physics (Blocking Parallel - High Priority)
+    // Ensures positions are valid before drawing
+    coreui_update_physics(sys_id);
+
+    // 2. AI (Async Background - Best Effort)
+    // Updates colors based on velocity, doesn't block UI
+    coreui_run_ai(sys_id);
+
+    // 3. Render
+    // Schedules a repaint on Main Thread
+    coreui_redraw_canvas(canvas_id);
+    
+    // Debug output (throttled)
+    // println("."); 
+    return 0;
+}

@@ -1,0 +1,18 @@
+// tests/test_args.ar
+
+fn main() {
+    print("Testing 5 arguments...\n")
+    let res = sum_five(1, 2, 3, 4, 5)
+    if (res == 15) {
+        print("PASSED\n")
+    } else {
+        print("FAILED: ")
+        // print(res) // can't print int
+        print("\n")
+    }
+    return 0
+}
+
+fn sum_five(a, b, c, d, e) {
+    return a + b + c + d + e
+}

@@ -1,0 +1,53 @@
+// ==========================================
+// Ardium Stress Test: Parser & Stack
+// ==========================================
+
+@External("libc")
+extern fn printf(fmt, ...)
+
+@External("libc")
+extern fn clock()
+
+fn main() {
+    let start_t = clock();
+
+    printf("--- ARDIUM STRESS TEST ---\n");
+    printf("Target: 50,000,000 iterations\n");
+    
+    // ตัวแปร Loop Control (ประกาศข้างนอกตามปกติ)
+    var i = 0;
+    let limit = 50000000; 
+    
+    while (i < limit) {
+        // [TEST 1] Parser Check:
+        // ถ้า Parser เก่า: จะพังตรงบรรทัด var x = ... นี้เลย
+        // ถ้า Parser ใหม่: จะผ่านฉลุย
+        
+        // [TEST 2] Stack Check:
+        // ถ้าไม่มี Alloca Hoisting: บรรทัดพวกนี้จะจอง Stack ใหม่ 50 ล้านครั้ง -> Segfault
+        // ถ้ามี Hoisting: มันจะใช้ Memory เดิมซ้ำๆ -> รันจนจบได้
+        
+        var x = i;
+        var y = x + 100;
+        var z = x * 2;
+        var sum = x + y + z;
+        
+        // Checkpoint: แสดงผลทุก 10 ล้านรอบ
+        if (i == 10000000) { printf(">> Pass 10M... (Stack OK)\n"); }
+        if (i == 20000000) { printf(">> Pass 20M... (Stack OK)\n"); }
+        if (i == 30000000) { printf(">> Pass 30M... (Stack OK)\n"); }
+        if (i == 40000000) { printf(">> Pass 40M... (Stack OK)\n"); }
+        
+        i = i + 1;
+    }
+    
+    let end_t = clock();
+    let duration = (end_t - start_t) / 1000;
+    
+    printf(">> Pass 50M (Finish!)\n");
+    printf("\n");
+    printf("STATUS:  [SUCCESS] No Stack Overflow & Parser works!\n");
+    printf("Time:    %d ms\n", duration);
+    
+    return 0;
+}

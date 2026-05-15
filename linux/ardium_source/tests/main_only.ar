@@ -1,0 +1,27 @@
+// import "GUI" // Not needed if concatenated
+
+fn main() {
+    init_gui();
+    create_window("Ardium Layout Test", 400, 300);
+
+    // Main VSTACK
+    VStack(20, 1, fn() { // Spacing 20, Center Alignment
+        Text("Hello from VStack!");
+        
+        HStack(10, 0, fn() { // Spacing 10, Leading
+            Button("Left");
+            Button("Right");
+        });
+        
+        TextField("Enter Name");
+        
+        ZStack(fn() {
+             // Overlapping text
+             Text("Bottom Layer");
+             Text("Top Layer");
+        });
+    });
+
+    run_gui();
+    return 0;
+}

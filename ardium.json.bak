@@ -1,0 +1,7 @@
+{
+  "project": "AscensionLab",
+  "version": "1.0.0",
+  "target": "arm64-apple-macosx14.0.0",
+  "frameworks": ["Foundation", "OS"],
+  "modules": ["sample_mod.ar"]
+}

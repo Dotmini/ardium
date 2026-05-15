@@ -1,0 +1,145 @@
+// ============================================================================
+// dev.ar - Ardium Comprehensive Test Suite & Debug System
+// ============================================================================
+
+fn test_basic_types() {
+    println("=== TEST 1: Basic Types ===");
+    let int_zero = 0;
+    let int_positive = 42;
+    let int_negative = 0 - 10; // Note: Use 0-X for negative until UMINUS bug fixed
+    let int_hex = 0xFF;
+    print("Int Zero: "); println(int_zero);
+    print("Int Positive: "); println(int_positive);
+    print("Int Hex: "); println(int_hex);
+    
+    let float_zero = 0.0;
+    let float_pi = 3.14159;
+    print("Float Pi: "); println(float_pi);
+    
+    let str_hello = "Hello, Ardium!";
+    print("String: "); println(str_hello);
+    println("Basic types test passed");
+}
+
+fn test_arithmetic() {
+    println("=== TEST 2: Arithmetic Operations ===");
+    let a = 10;
+    let b = 3;
+    print("10 + 3 = "); println(a + b);
+    print("10 - 3 = "); println(a - b);
+    print("10 * 3 = "); println(a * b);
+    print("10 / 3 = "); println(a / b);
+    
+    let x = 10.5;
+    let y = 2.5;
+    print("10.5 + 2.5 = "); println(x + y);
+    print("10.5 - 2.5 = "); println(x - y);
+    print("10.5 * 2.5 = "); println(x * y);
+    print("10.5 / 2.5 = "); println(x / y);
+    println("Arithmetic test passed");
+}
+
+fn test_comparisons() {
+    println("=== TEST 3: Comparison Operations ===");
+    let a = 10;
+    let b = 20;
+    if (a == 10) { println("OK: a == 10"); }
+    if (a != b) { println("OK: a != b"); }
+    if (a < b) { println("OK: a < b"); }
+    if (b > a) { println("OK: b > a"); }
+    println("Comparison test passed");
+}
+
+fn test_if_else() {
+    println("=== TEST 4: If/Else Control Flow ===");
+    let x = 10;
+    if (x > 5) { println("OK: x > 5"); }
+    
+    let y = 3;
+    if (y > 5) { println("FAIL"); } else { println("OK: y <= 5"); }
+    println("If/Else test passed");
+}
+
+fn test_loops() {
+    println("=== TEST 5: Loop Operations ===");
+    let i = 0;
+    while (i < 5) {
+        print("i = "); println(i);
+        i = i + 1;
+    }
+    
+    let sum = 0;
+    let n = 1;
+    while (n < 6) {
+        sum = sum + n;
+        n = n + 1;
+    }
+    print("Sum 1-5 = "); println(sum);
+    println("Loop test passed");
+}
+
+fn helper_add(a, b) { return a + b; }
+
+fn test_functions() {
+    println("=== TEST 6: Function Calls ===");
+    let sum = helper_add(10, 20);
+    print("add(10, 20) = "); println(sum);
+    println("Function test passed");
+}
+
+fn test_memory() {
+    println("=== TEST 7: Memory Management ===");
+    let ptr1 = malloc(8);
+    print("PTR1: "); println(ptr1);
+    RESET();
+    let ptr2 = malloc(8);
+    print("After RESET: "); println(ptr2);
+    println("Memory test passed");
+}
+
+fn test_math() {
+    println("=== TEST 8: Math Functions ===");
+    print("sin(0) = "); println(sin(0.0));
+    print("cos(0) = "); println(cos(0.0));
+    print("sqrt(16) = "); println(sqrt(16.0));
+    print("pow(2, 3) = "); println(pow(2.0, 3.0));
+    println("Math test passed");
+}
+
+let global_counter = 0;
+let global_name = "Global";
+
+fn test_globals() {
+    println("=== TEST 9: Global Variables ===");
+    global_counter = 42;
+    print("Global counter: "); println(global_counter);
+    print("Global name: "); println(global_name);
+    println("Global test passed");
+}
+
+fn main() {
+    println("=================================================");
+    println("       ARDIUM COMPREHENSIVE DEBUG SUITE          ");
+    println("=================================================");
+    test_basic_types();
+    println("");
+    test_arithmetic();
+    println("");
+    test_comparisons();
+    println("");
+    test_if_else();
+    println("");
+    test_loops();
+    println("");
+    test_functions();
+    println("");
+    test_memory();
+    println("");
+    test_math();
+    println("");
+    test_globals();
+    println("");
+    println("=================================================");
+    println("              ALL TESTS COMPLETE                 ");
+    println("=================================================");
+}

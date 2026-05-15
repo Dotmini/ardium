@@ -1,0 +1,12 @@
+
+// --- State Accessors (Externs) ---
+fn safe_get_cursor_x() { return __agui_get_cursor_x() }
+fn safe_set_cursor_x(v) { __agui_set_cursor_x(v) }
+
+fn safe_get_cursor_y() { return __agui_get_cursor_y() }
+fn safe_set_cursor_y(v) { __agui_set_cursor_y(v) }
+
+fn safe_get_layout_mode() { return __agui_get_layout_mode() }
+fn safe_set_layout_mode(v) { __agui_set_layout_mode(v) }
+
+fn main() { return 0 }

@@ -1,0 +1,4 @@
+module test_tensor {
+  header "test_tensor.h"
+  export *
+}

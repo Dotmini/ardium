@@ -1,0 +1,181 @@
+// stdlib/Runtime/String.ar
+// Ardium Self-Hosting Runtime: String Operations
+// Pure Ardium UTF-8 string handling
+
+import "Runtime/Memory"
+
+// String structure (UTF-8)
+struct String {
+    data: int       // Pointer to char array
+    length: int     // Length in bytes
+    capacity: int   // Allocated capacity
+}
+
+// Create string from C string
+fn String_from_cstr(cstr: int) -> int {
+    // Measure length
+    let len = 0
+    while (__builtin_peek(cstr + len) != 0) {
+        len = len + 1
+    }
+    
+    return String_from_bytes(cstr, len)
+}
+
+// Create string from bytes
+fn String_from_bytes(bytes: int, length: int) -> int {
+    let capacity = (length + 16) / 16 * 16  // Align to 16
+    let data = alloc(capacity)
+    
+    if (data == 0) {
+        return 0  // OOM
+    }
+    
+    // Copy bytes
+    __sys_memcpy(data, bytes, length)
+    
+    // Create string struct
+    let str = alloc(24)  // sizeof(String)
+    __builtin_poke(str + 0, data)
+    __builtin_poke(str + 8, length)
+    __builtin_poke(str + 16, capacity)
+    
+    return str
+}
+
+// Get string length
+fn String_length(str: int) -> int {
+    return __builtin_peek(str + 8)
+}
+
+// Get C-string pointer (null-terminated)
+fn String_cstr(str: int) -> int {
+    let data = __builtin_peek(str + 0)
+    let length = __builtin_peek(str + 8)
+    
+    // Ensure null terminator
+    __builtin_poke(data + length, 0)
+    
+    return data
+}
+
+// Concatenate two strings
+fn String_concat(a: int, b: int) -> int {
+    let len_a = String_length(a)
+    let len_b = String_length(b)
+    let total_len = len_a + len_b
+    
+    let capacity = (total_len + 16) / 16 * 16
+    let data = alloc(capacity)
+    
+    if (data == 0) {
+        return 0  // OOM
+    }
+    
+    // Copy first string
+    let data_a = __builtin_peek(a + 0)
+    __sys_memcpy(data, data_a, len_a)
+    
+    // Copy second string
+    let data_b = __builtin_peek(b + 0)
+    __sys_memcpy(data + len_a, data_b, len_b)
+    
+    // Create result string
+    let result = alloc(24)
+    __builtin_poke(result + 0, data)
+    __builtin_poke(result + 8, total_len)
+    __builtin_poke(result + 16, capacity)
+    
+    return result
+}
+
+// Compare strings
+fn String_equals(a: int, b: int) -> int {
+    let len_a = String_length(a)
+    let len_b = String_length(b)
+    
+    if (len_a != len_b) {
+        return 0  // false
+    }
+    
+    let data_a = __builtin_peek(a + 0)
+    let data_b = __builtin_peek(b + 0)
+    
+    let i = 0
+    while (i < len_a) {
+        if (__builtin_peek(data_a + i) != __builtin_peek(data_b + i)) {
+            return 0  // false
+        }
+        i = i + 1
+    }
+    
+    return 1  // true
+}
+
+// Find substring
+fn String_find(haystack: int, needle: int) -> int {
+    let hay_len = String_length(haystack)
+    let need_len = String_length(needle)
+    
+    if (need_len > hay_len) {
+        return -1  // not found
+    }
+    
+    let hay_data = __builtin_peek(haystack + 0)
+    let need_data = __builtin_peek(needle + 0)
+    
+    let i = 0
+    while (i <= hay_len - need_len) {
+        let match = 1
+        let j = 0
+        
+        while (j < need_len) {
+            if (__builtin_peek(hay_data + i + j) != __builtin_peek(need_data + j)) {
+                match = 0
+                j = need_len  // break
+            }
+            j = j + 1
+        }
+        
+        if (match == 1) {
+            return i  // found at position i
+        }
+        
+        i = i + 1
+    }
+    
+    return -1  // not found
+}
+
+// Substring
+fn String_substring(str: int, start: int, end: int) -> int {
+    let length = String_length(str)
+    
+    if (start < 0) {
+        start = 0
+    }
+    if (end > length) {
+        end = length
+    }
+    if (start >= end) {
+        return String_from_bytes(0, 0)  // empty string
+    }
+    
+    let data = __builtin_peek(str + 0)
+    let sub_len = end - start
+    
+    return String_from_bytes(data + start, sub_len)
+}
+
+// Print string
+fn String_print(str: int) {
+    let data = __builtin_peek(str + 0)
+    let length = __builtin_peek(str + 8)
+    __sys_write(1, data, length)
+}
+
+// Print string with newline
+fn String_println(str: int) {
+    String_print(str)
+    __sys_print("\n")
+}

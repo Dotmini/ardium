@@ -1,0 +1,4 @@
+fn main() {
+    print("Sanity Check\n")
+    return 0
+}

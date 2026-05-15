@@ -1,0 +1,4 @@
+module main {
+  header "spu_demo.h"
+  export *
+}

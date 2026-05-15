@@ -1,0 +1,23 @@
+let env = "Production"
+let port = 8080
+let version = 2.0
+
+GLOBAL(Config) = (env, port, version)
+
+fn main() {
+    print("Testing Generic GLOBAL...\n")
+    
+    print("Environment: ")
+    print(GLOBAL.Config.env)
+    print("\n")
+    
+    print("Port: ")
+    print(GLOBAL.Config.port)
+    print("\n")
+    
+    if (GLOBAL.Config.version > 1.0) {
+        print("Version is > 1.0\n")
+    }
+
+    return 0
+}

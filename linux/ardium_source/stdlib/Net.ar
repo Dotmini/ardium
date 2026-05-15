@@ -1,0 +1,21 @@
+// --- Ardium Networking (Net.ar) ---
+// Cluster Control and Socket Communication
+
+extern fn titan_net_init();
+extern fn titan_net_listen(port) -> i64;
+extern fn titan_net_connect(ip, port) -> i64;
+
+class Network {
+    fn init() {
+        titan_net_init();
+        return 0;
+    }
+
+    fn listen(port) {
+        return titan_net_listen(port);
+    }
+
+    fn connect(ip, port) {
+        return titan_net_connect(ip, port);
+    }
+}

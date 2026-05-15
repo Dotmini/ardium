@@ -1,0 +1,5 @@
+fn main() {
+    GLOBAL.Info = 777;
+    println(GLOBAL.Info);
+    return 0;
+}

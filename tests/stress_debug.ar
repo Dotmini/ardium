@@ -1,0 +1,41 @@
+// tests/stress_debug.ar
+
+fn main() {
+    print("Debug Matrix Fill\n")
+    let size = 10
+    let ptr = __sys_malloc(800)
+    if (ptr == 0) {
+        print("Alloc failed\n")
+        return 0
+    }
+    
+    debug_fill(ptr, size, 3)
+    __sys_free(ptr)
+    print("Done\n")
+    return 0
+}
+
+fn debug_fill(m, size, value) {
+    print("Fill start\n")
+    let count = size * size
+    print("Count: ")
+    __builtin_print_int(count)
+    
+    let i = 0
+    while (i < count) {
+        // print("i: ")
+        // __builtin_print_int(i)
+        
+        let offset = i * 8
+        let addr = m + offset
+        
+        // print("addr: ")
+        // __builtin_print_int(addr)
+        
+        __builtin_poke(addr, value)
+        
+        i = i + 1
+    }
+    print("Fill end\n")
+    return 0
+}

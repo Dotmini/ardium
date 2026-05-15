@@ -1,0 +1,5 @@
+fn main() {
+    print("Starting Web Server on port 8080...\n")
+    start_server(8080)
+    return 0
+}

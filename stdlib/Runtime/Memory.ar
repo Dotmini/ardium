@@ -1,0 +1,99 @@
+// stdlib/Runtime/Memory.ar
+
+let ARENA_SIZE = 16777216;
+let ARENA_COUNT = 0;
+let ARENA_LIST = 0;
+
+struct Arena { base: i64, offset: i64, size: i64, next: i64 }
+
+fn Memory_init() {
+    ARENA_LIST = Arena_new(ARENA_SIZE);
+    ARENA_COUNT = 1;
+}
+
+// Helper: print integer
+fn print_int(n) {
+    __sys_print_int(n);
+    return 0;
+}
+
+fn Arena_new(size) {
+    let base = __sys_malloc(size);
+    if (base == 0) {
+        __sys_println("FATAL: Failed to allocate arena");
+        return 0;
+    }
+    
+    // Allocate arena header
+    let arena = __sys_malloc(32);  // sizeof(Arena)
+    __builtin_poke(arena + 0, base);      // base
+    __builtin_poke(arena + 8, 0);         // offset
+    __builtin_poke(arena + 16, size);     // size
+    __builtin_poke(arena + 24, 0);        // next
+    
+    return arena;
+}
+
+// Allocate from arena (fast path)
+fn Arena_alloc(arena, size) {
+    let offset = __builtin_peek(arena + 8);
+    let total_size = __builtin_peek(arena + 16);
+    let new_offset = offset + size;
+    
+    if (new_offset > total_size) {
+        return 0;  // Arena full
+    }
+    
+    __builtin_poke(arena + 8, new_offset);
+    let base = __builtin_peek(arena + 0);
+    return base + offset;
+}
+
+// Main allocation function (public API)
+fn alloc(size) {
+    // Align to 8 bytes
+    let aligned_size = (size + 7) / 8 * 8;
+    
+    // Try current arena
+    let ptr = Arena_alloc(ARENA_LIST, aligned_size);
+    if (ptr != 0) {
+        return ptr;
+    }
+    
+    // Need new arena
+    let new_arena = Arena_new(ARENA_SIZE);
+    if (new_arena == 0) {
+        return 0;  // Out of memory
+    }
+    
+    // Link to chain
+    __builtin_poke(new_arena + 24, ARENA_LIST);
+    ARENA_LIST = new_arena;
+    ARENA_COUNT = ARENA_COUNT + 1;
+    
+    // Allocate from new arena
+    return Arena_alloc(new_arena, aligned_size);
+}
+
+// fn Memory_reset() {
+//    let current = ARENA_LIST;
+//    while (current != 0) {
+//        __builtin_poke(current + 8, 0);  // offset = 0
+//        current = __builtin_peek(current + 24);  // next
+//    }
+// }
+
+// fn Memory_destroy() {
+//    let current = ARENA_LIST;
+//    while (current != 0) {
+//        let next = __builtin_peek(current + 24);
+//        let base = __builtin_peek(current + 0);
+//        __sys_free(base);
+//        __sys_free(current);
+//        current = next;
+//    }
+//    ARENA_LIST = 0;
+//    ARENA_COUNT = 0;
+// }
+
+Memory_init();

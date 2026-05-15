@@ -1,0 +1,4 @@
+module test_v2_strings {
+  header "test_v2_strings.h"
+  export *
+}

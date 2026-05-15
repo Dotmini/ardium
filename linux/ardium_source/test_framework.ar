@@ -1,0 +1,6 @@
+extern fn printf(fmt, ...);
+
+fn main() {
+    printf("Linking Foundation framework successfully!\n");
+    return 0;
+}

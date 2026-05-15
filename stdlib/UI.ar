@@ -1,0 +1,36 @@
+// --- Ardium CoreUI (UI.ar) ---
+// Declarative UI System for Titan v5.0
+
+extern fn titan_ui_create_container(id, type) -> ptr;
+extern fn titan_ui_add_child(parent, child);
+
+class UI {
+    // Layout Types
+    fn VERTICAL()   { return 0; }
+    fn HORIZONTAL() { return 1; }
+    fn STACK()      { return 2; }
+
+    /**
+     * @VClass decorator equivalent helper
+     */
+    fn create_vbox(id) {
+        return titan_ui_create_container(id, 0); // Vertical
+    }
+
+    /**
+     * @HClass decorator equivalent helper
+     */
+    fn create_hbox(id) {
+        return titan_ui_create_container(id, 1); // Horizontal
+    }
+
+    fn add(parent, child) {
+        titan_ui_add_child(parent, child);
+        return 0;
+    }
+}
+
+// Example Usage (Mockup)
+// let root = UI.create_vbox("main_panel");
+// let btn  = UI.create_button("submit");
+// UI.add(root, btn);

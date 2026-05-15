@@ -1,0 +1,10 @@
+
+print("Start Debug");
+
+class Main(0) {
+   print("Inside Main Constructor");
+}
+
+Main();
+
+print("End Debug");

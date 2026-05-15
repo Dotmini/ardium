@@ -1,0 +1,31 @@
+// stdlib/CoreString.ar - Native String Implementation (v1)
+
+fn strlen(s) {
+    return __sys_strlen(s);
+}
+
+fn concat(s1, s2) {
+    let l1 = __sys_strlen(s1);
+    let l2 = __sys_strlen(s2);
+    let size = l1 + l2 + 1;
+    
+    let size = l1 + l2 + 1;
+    
+    let new_str = __sys_malloc(size);
+    
+    __sys_memcpy(new_str, s1, l1);
+    __sys_memcpy((new_str + l1), s2, l2);
+    __sys_memset((new_str + l1 + l2), 0, 1);
+    
+    return new_str;
+}
+
+fn streq(s1, s2) {
+    let l1 = __sys_strlen(s1);
+    let l2 = __sys_strlen(s2);
+    if (l1 != l2) { return 0; }
+    
+    let diff = __sys_memcmp(s1, s2, l1);
+    if (diff == 0) { return 1; }
+    return 0;
+}

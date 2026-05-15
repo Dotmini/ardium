@@ -1,0 +1,11 @@
+fn main() {
+    createApplication("Native Swift App");
+    addButton("Button 1");
+    addButton("Button 2");
+    
+    // Testing C-Interop with String
+    addButton("Hello from Ardium");
+
+    runApplication();
+    return 0;
+}

@@ -1,0 +1,1 @@
+fn main() { var i = 0; while (i < 1000000) { var x = i * 2; i = i + 1; } return 0; }

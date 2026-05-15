@@ -1,0 +1,30 @@
+fn main() {
+    print("Testing Python-like Syntax...\n")
+    
+    // Implicit Declaration
+    x = 10
+    print("x = ")
+    print(x)
+    print("\n")
+    
+    // Implicit Decl with String
+    msg = "Freedom!"
+    print(msg)
+    print("\n")
+    
+    // Optional Parentheses in IF
+    if x == 10 {
+        print("Optional Parens in IF working!\n")
+    }
+    
+    // Optional Parentheses in LOOP
+    i = 0
+    while i < 3 {
+        print("Looping ")
+        print(i)
+        print("\n")
+        i = i + 1
+    }
+    
+    return 0
+}

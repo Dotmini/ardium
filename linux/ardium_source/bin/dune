@@ -1,0 +1,4 @@
+(executable
+ (name main)
+ (public_name arc)
+ (libraries ardium_core core llvm llvm.analysis llvm.target llvm.executionengine llvm.all_backends))

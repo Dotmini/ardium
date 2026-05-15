@@ -1,0 +1,4 @@
+module test_template {
+  header "test_template.h"
+  export *
+}

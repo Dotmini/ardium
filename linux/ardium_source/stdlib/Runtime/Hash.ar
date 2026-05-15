@@ -1,0 +1,208 @@
+// stdlib/Runtime/Hash.ar
+// Ardium Self-Hosting Runtime: Hash Tables
+// Pure Ardium hash map implementation
+
+import "Runtime/Memory"
+import "Runtime/Array"
+
+let HASH_INITIAL_CAPACITY = 16
+let HASH_LOAD_FACTOR = 75  // 75% = 0.75 (using integer math)
+
+struct HashEntry {
+    key: int        // Pointer to key
+    value: int      // Pointer to value
+    hash: int       // Cached hash code
+    next: int       // Next entry (chaining)
+}
+
+struct HashMap {
+    buckets: int    // Array of bucket heads
+    capacity: int   // Number of buckets
+    size: int       // Number of entries
+    key_size: int   // Size of key type
+    value_size: int // Size of value type
+}
+
+// Hash function (FNV-1a)
+fn hash_bytes(data: int, length: int) -> int {
+    let hash = 2166136261  // FNV offset basis
+    let i = 0
+    
+    while (i < length) {
+        let byte = __builtin_peek(data + i)
+        hash = hash ^ byte
+        hash = hash * 16777619  // FNV prime
+        i = i + 1
+    }
+    
+    return hash
+}
+
+// Create new hash map
+fn HashMap_new(key_size: int, value_size: int) -> int {
+    let capacity = HASH_INITIAL_CAPACITY
+    let buckets = alloc(capacity * 8)  // Array of pointers
+    
+    if (buckets == 0) {
+        return 0
+    }
+    
+    // Initialize buckets to null
+    let i = 0
+    while (i < capacity) {
+        __builtin_poke(buckets + (i * 8), 0)
+        i = i + 1
+    }
+    
+    let map = alloc(40)  // sizeof(HashMap)
+    __builtin_poke(map + 0, buckets)
+    __builtin_poke(map + 8, capacity)
+    __builtin_poke(map + 16, 0)  // size
+    __builtin_poke(map + 24, key_size)
+    __builtin_poke(map + 32, value_size)
+    
+    return map
+}
+
+// Get hash map size
+fn HashMap_size(map: int) -> int {
+    return __builtin_peek(map + 16)
+}
+
+// Insert or update key-value pair
+fn HashMap_put(map: int, key: int, value: int) {
+    let capacity = __builtin_peek(map + 8)
+    let size = __builtin_peek(map + 16)
+    let key_size = __builtin_peek(map + 24)
+    let value_size = __builtin_peek(map + 32)
+    
+    // Check if we need to resize
+    if (size * 100 / capacity >= HASH_LOAD_FACTOR) {
+        HashMap_resize(map)
+        capacity = __builtin_peek(map + 8)  // Updated capacity
+    }
+    
+    // Calculate hash and bucket
+    let hash = hash_bytes(key, key_size)
+    let bucket_idx = hash - (hash / capacity * capacity)  // Modulo
+    
+    let buckets = __builtin_peek(map + 0)
+    let entry = __builtin_peek(buckets + (bucket_idx * 8))
+    
+    // Search for existing key
+    while (entry != 0) {
+        let entry_hash = __builtin_peek(entry + 16)
+        if (entry_hash == hash) {
+            let entry_key = __builtin_peek(entry + 0)
+            if (keys_equal(entry_key, key, key_size) == 1) {
+                // Update existing value
+                let entry_value = __builtin_peek(entry + 8)
+                __sys_memcpy(entry_value, value, value_size)
+                return 0
+            }
+        }
+        entry = __builtin_peek(entry + 24)  // next
+    }
+    
+    // Create new entry
+    let new_entry = alloc(32)  // sizeof(HashEntry)
+    let key_copy = alloc(key_size)
+    let value_copy = alloc(value_size)
+    
+    __sys_memcpy(key_copy, key, key_size)
+    __sys_memcpy(value_copy, value, value_size)
+    
+    __builtin_poke(new_entry + 0, key_copy)
+    __builtin_poke(new_entry + 8, value_copy)
+    __builtin_poke(new_entry + 16, hash)
+    __builtin_poke(new_entry + 24, __builtin_peek(buckets + (bucket_idx * 8)))
+    
+    // Insert at head of bucket
+    __builtin_poke(buckets + (bucket_idx * 8), new_entry)
+    __builtin_poke(map + 16, size + 1)
+    
+    return 0
+}
+
+// Get value by key
+fn HashMap_get(map: int, key: int) -> int {
+    let capacity = __builtin_peek(map + 8)
+    let key_size = __builtin_peek(map + 24)
+    
+    let hash = hash_bytes(key, key_size)
+    let bucket_idx = hash - (hash / capacity * capacity)
+    
+    let buckets = __builtin_peek(map + 0)
+    let entry = __builtin_peek(buckets + (bucket_idx * 8))
+    
+    while (entry != 0) {
+        let entry_hash = __builtin_peek(entry + 16)
+        if (entry_hash == hash) {
+            let entry_key = __builtin_peek(entry + 0)
+            if (keys_equal(entry_key, key, key_size) == 1) {
+                return __builtin_peek(entry + 8)  // value
+            }
+        }
+        entry = __builtin_peek(entry + 24)
+    }
+    
+    return 0  // Not found
+}
+
+// Check if key exists
+fn HashMap_has(map: int, key: int) -> int {
+    return HashMap_get(map, key) != 0
+}
+
+// Helper: compare keys
+fn keys_equal(a: int, b: int, size: int) -> int {
+    let i = 0
+    while (i < size) {
+        if (__builtin_peek(a + i) != __builtin_peek(b + i)) {
+            return 0
+        }
+        i = i + 1
+    }
+    return 1
+}
+
+// Resize hash map
+fn HashMap_resize(map: int) {
+    let old_capacity = __builtin_peek(map + 8)
+    let new_capacity = old_capacity * 2
+    
+    let new_buckets = alloc(new_capacity * 8)
+    if (new_buckets == 0) {
+        return 0
+    }
+    
+    // Initialize new buckets
+    let i = 0
+    while (i < new_capacity) {
+        __builtin_poke(new_buckets + (i * 8), 0)
+        i = i + 1
+    }
+    
+    // Rehash all entries
+    let old_buckets = __builtin_peek(map + 0)
+    i = 0
+    while (i < old_capacity) {
+        let entry = __builtin_peek(old_buckets + (i * 8))
+        
+        while (entry != 0) {
+            let next = __builtin_peek(entry + 24)
+            let hash = __builtin_peek(entry + 16)
+            let bucket_idx = hash - (hash / new_capacity * new_capacity)
+            
+            // Relink entry
+            __builtin_poke(entry + 24, __builtin_peek(new_buckets + (bucket_idx * 8)))
+            __builtin_poke(new_buckets + (bucket_idx * 8), entry)
+            
+            entry = next
+        }
+        i = i + 1
+    }
+    
+    __builtin_poke(map + 0, new_buckets)
+    __builtin_poke(map + 8, new_capacity)
+}

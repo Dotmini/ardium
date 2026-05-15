@@ -1,0 +1,4 @@
+fn main() {
+  let msg = "Hello";
+  return 0;
+}

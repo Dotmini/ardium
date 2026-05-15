@@ -1,0 +1,56 @@
+// tests/test_evolution.ar
+
+enum Status {
+    Success = 1,
+    Failure = 0,
+    Unknown
+}
+
+@External("libc")
+extern fn printf(fmt, ...)
+
+fn main() {
+    __sys_print("--- Ardium Evolution Test ---\n");
+    
+    // 1. var syntax
+    var x = 10;
+    __sys_print("x = ");
+    __sys_print_int(x);
+    __sys_print("\n");
+    
+    x = 20;
+    __sys_print("mutated x = ");
+    __sys_print_int(x);
+    __sys_print("\n");
+    
+    // 2. enum support
+    let s = Status.Success;
+    __sys_print("Status.Success = ");
+    __sys_print_int(s);
+    __sys_print("\n");
+    
+    let f = Status.Failure;
+    __sys_print("Status.Failure = ");
+    __sys_print_int(f);
+    __sys_print("\n");
+    
+    let u = Status.Unknown;
+    __sys_print("Status.Unknown (auto-increment) = ");
+    __sys_print_int(u);
+    __sys_print("\n");
+    
+    // 3. @External Test (via printf)
+    // Note: printf requires i8* for fmt, our compiler promotes string to pointer
+    printf("Hello from @External printf! x is %d\n", x);
+    
+    // 4. @State Test
+    @State
+    var counter = 0;
+    counter = counter + 1;
+    __sys_print("Counter state: ");
+    __sys_print_int(counter);
+    __sys_print("\n");
+    
+    __sys_print("SUCCESS\n");
+    return 0;
+}

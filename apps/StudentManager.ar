@@ -1,0 +1,89 @@
+import CoreUI
+
+struct Student {
+    name: string,
+    surname: string,
+    id: string,
+    citizen_id: string,
+    age: i32,
+    faculty: string,
+    department: string,
+    image_path: string
+}
+
+// Global State
+@State var current_view = 0;
+@State var selected_index = -1;
+@State var search_query = "";
+
+fn SidebarRender() {
+    VStack(fn() {
+        Title("Students");
+        TextField("Search...");
+        
+        VStack(fn() {
+            Button("Somchai Dev");
+            Button("Somsri AI");
+            Button("Wichai SPU");
+        });
+        
+        Button("+ Add New");
+    });
+}
+
+fn StudentDetailRender() {
+    VStack(fn() {
+        HStack(fn() {
+            Image("apps/student_avatar.png", 120, 120);
+            VStack(fn() {
+                Title("Somchai Dev");
+                Headline("ID: 64010123");
+            });
+        });
+        
+        VStack(fn() {
+            HStack(fn() { Text("Dept:"); Text("CS"); });
+            HStack(fn() { Text("Faculty:"); Text("IT"); });
+            HStack(fn() { Text("Age:"); Text("20"); });
+        });
+        
+        HStack(fn() {
+            Button("Edit");
+            Button("Delete");
+        });
+    });
+}
+
+fn StudentFormRender() {
+    VStack(fn() {
+        Title("Add New Student");
+        TextField("First Name");
+        TextField("Last Name");
+        TextField("Student ID");
+        HStack(fn() {
+            Button("Save");
+            Button("Cancel");
+        });
+    });
+}
+
+fn MainApp() {
+    HStack(fn() {
+        SidebarRender();
+        VStack(fn() {
+            if (current_view == 0) {
+                StudentDetailRender();
+            } else {
+                StudentFormRender();
+            }
+        });
+    });
+}
+
+fn main() {
+    init();
+    createWindow("Ardium Student Manager Pro", 1000, 700);
+    MainApp();
+    run();
+    return 0;
+}

@@ -1,0 +1,4 @@
+extern fn swiftCreateApp(title);
+extern fn swiftAddButton(label);
+extern fn swiftRunApp();
+fn main() { swiftCreateApp("App"); swiftAddButton("Btn"); swiftRunApp(); return 0; }

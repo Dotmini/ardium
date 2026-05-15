@@ -1,0 +1,10 @@
+// stdlib/CoreCrypto.ar - Ardium CoreCrypto Framework
+
+fn SHA256(input) {
+    return ardium_sha256(input)
+}
+
+fn MD5(input) {
+    // Stub
+    return "md5_stub"
+}

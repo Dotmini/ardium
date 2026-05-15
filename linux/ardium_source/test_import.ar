@@ -1,0 +1,6 @@
+import "CoreUI"
+
+fn main() {
+    print("Import Test\n")
+    return 0
+}

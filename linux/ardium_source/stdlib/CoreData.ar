@@ -1,0 +1,14 @@
+// stdlib/CoreData.ar - Ardium CoreData Framework
+
+fn Load(path) {
+    return ardium_read_file(path)
+}
+
+fn Save(path, content) {
+    ardium_write_file(path, content)
+}
+
+fn IsExists(path) {
+    // To be implemented
+    return 0
+}

@@ -1,0 +1,25 @@
+fn main() {
+    print("\n");
+    print("  🚀 [Titan JIT] Booting MicroCode IDE v1.0\n");
+    print("  -----------------------------------------\n");
+    print("  PROJECT : SPU AI CLUB - Ardium Core\n");
+    print("  STATUS  : Global Matrix Synced\n");
+    print("\n");
+
+    print("  [ UI ] Initializing Workspace...\n");
+    print("  [ FILE ] [ EDIT ] [ RUN  ] [ HELP ]\n");
+    
+    print("\n  >> EDITOR CORE <<\n");
+    print("  1 | fn main() {\n");
+    print("  2 |     let msg = \"Hello SPU AI CLUB\";\n");
+    print("  3 |     print(msg);\n");
+    print("  4 | }\n");
+
+    print("\n  >> CONSOLE <<\n");
+    print("  [ CLEAR ] [ EXPORT ]\n");
+    print("  [System] MicroCode IDE Ready.\n");
+
+    print("\n  -----------------------------------------\n");
+    print("  (c) 2026 SPU AI CLUB - Major Engine\n");
+    return 0;
+}

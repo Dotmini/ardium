@@ -1,0 +1,2 @@
+extern fn swiftCreateApp(title);
+fn main() { swiftCreateApp("App"); return 0; }

@@ -1,0 +1,7 @@
+class Header {
+    ID: i32,
+    Size: i64
+}
+fn main() {
+    GLOBAL(1) as Header;
+}

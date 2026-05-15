@@ -1,0 +1,42 @@
+// Topic: Arrays (C-style Pointers)
+// Sum elements of an array
+
+extern fn printf(fmt: string, val: int);
+// extern fn malloc(size: int) -> int*; // Pointer to int
+// We can use generic pointer access logic if type inference allows or cast.
+// Ardium treats 'int' as 64-bit.
+// Access via index usually requires syntax `a[i]`?
+// Ardium Parser does NOT support `[]`.
+// We must use pointer arithmetic: `poke` and `peek`.
+// Or define `set(arr, idx, val)` and `get(arr, idx)`.
+
+extern fn malloc(size: int) -> int; // Return address as int
+extern fn free(ptr: int);
+extern fn poke(addr: int, val: int); // Write memory
+extern fn peek(addr: int) -> int;    // Read memory
+
+fn main() {
+    var size = 5;
+    var arr = malloc(size * 8); // 5 elements * 8 bytes (i64)
+
+    // Fill
+    var i = 0;
+    while (i < size) {
+        // arr + (i * 8)
+        poke(arr + (i * 8), i * 10); // 0, 10, 20, 30, 40
+        i = i + 1;
+    }
+
+    // Sum
+    var sum = 0;
+    i = 0;
+    while (i < size) {
+        var val = peek(arr + (i * 8));
+        sum = sum + val;
+        i = i + 1;
+    }
+
+    printf("Sum: %d\n", sum);
+    // free(arr); // Let OS reclaim
+    return 0;
+}

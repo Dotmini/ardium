@@ -1,0 +1,128 @@
+// --- Imports ---
+// (None)
+
+// --- Extern Definitions ---
+extern fn malloc(size) -> i64;
+extern fn free(ptr);
+extern fn init_apple_gui();
+extern fn create_apple_window(title, x, y, w, h);
+extern fn run_apple_gui();
+
+// --- Struct Definition ---
+// Using 'struct' keyword as per parser grammar for field definitions
+struct Point {
+    x: i64,
+    y: i64
+}
+
+struct Rect {
+    w: i64,
+    h: i64
+}
+
+// --- Helper Functions ---
+fn calculate_area(w: i64, h: i64) {
+    return w * h;
+}
+
+fn main() {
+    println("\n=== Ardium Comprehensive Feature Test ===\n");
+
+    // ---------------------------------------------------------
+    // 1. Variables & Arithmetic
+    // ---------------------------------------------------------
+    println("[1] Testing Variables & Arithmetic...");
+    let a = 100;
+    let b = 50;
+    let result = a + b;
+    let product = a * b;
+    
+    printf("    %d + %d = %d\n", a, b, result);
+    printf("    %d * %d = %d\n", a, b, product);
+
+    if (result == 150) {
+        println("    [PASS] Arithmetic OK");
+    } else {
+        println("    [FAIL] Arithmetic FAILED");
+    }
+
+    // ---------------------------------------------------------
+    // 2. Control Flow (Loops & Logic)
+    // ---------------------------------------------------------
+    println("\n[2] Testing Control Flow...");
+    let counter = 0;
+    let sum = 0;
+    
+    while (counter < 5) {
+        sum = sum + counter;
+        counter = counter + 1;
+    }
+    // 0+1+2+3+4 = 10
+    
+    printf("    Sum of 0..4 is %d\n", sum);
+    
+    if (sum == 10) {
+        println("    [PASS] Loop OK");
+    } else {
+        println("    [FAIL] Loop FAILED");
+    }
+
+    // ---------------------------------------------------------
+    // 3. Memory & Struct Mapping (The 'GLOBAL' pattern)
+    // ---------------------------------------------------------
+    println("\n[3] Testing Memory & Struct Mapping...");
+    
+    // Allocate memory for a Point (16 bytes)
+    let p_ptr = malloc(16);
+    
+    // Map pointer to Point struct layout
+    GLOBAL(p_ptr) as Point;
+    
+    // Assign values via GLOBAL accessor
+    GLOBAL.x = 10;
+    GLOBAL.y = 20;
+    
+    printf("    Point Struct @ %lld -> x: %lld, y: %lld\n", p_ptr, GLOBAL.x, GLOBAL.y);
+    
+    if (GLOBAL.x == 10) {
+        if (GLOBAL.y == 20) {
+            println("    [PASS] Struct Access OK");
+        } else {
+            println("    [FAIL] Struct Access FAILED");
+        }
+    } else {
+        println("    [FAIL] Struct Access FAILED");
+    }
+
+    // Re-map to a different struct (Rect) on the same memory
+    GLOBAL(p_ptr) as Rect;
+    GLOBAL.w = 55;
+    GLOBAL.h = 10;
+    let area = calculate_area(GLOBAL.w, GLOBAL.h);
+    
+    printf("    Rect Struct @ %lld -> w: %lld, h: %lld, Area: %lld\n", p_ptr, GLOBAL.w, GLOBAL.h, area);
+    
+    if (area == 550) {
+        println("    [PASS] Struct Remapping OK");
+    } else {
+        println("    [FAIL] Struct Remapping FAILED");
+    }
+
+    // ---------------------------------------------------------
+    // 4. GUI Integration (Apple/Cocoa)
+    // ---------------------------------------------------------
+    println("\n[4] Testing GUI Calls (Foundation/AppKit)...");
+    
+    // Initialize NSApplication
+    init_apple_gui();
+    println("    [PASS] GUI Initialized");
+    
+    // Create a Window
+    create_apple_window("Ardium Test Suite", 300, 300, 800, 600);
+    println("    [PASS] Window Created ('Ardium Test Suite')");
+    
+    println("    (Skipping run_apple_gui() to prevent blocking automated tests)");
+
+    println("\n=== All Tests Completed ===\n");
+    return 0;
+}

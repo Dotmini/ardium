@@ -1,0 +1,35 @@
+// tests/test_abs.ar
+import "CoreMath"
+
+fn main() {
+    __sys_print("Testing Abs\n");
+    
+    let a = 10;
+    let b = 0 - 10;
+    
+    __sys_print("a (10): ");
+    __sys_print_int(a);
+    __sys_print("\n");
+    
+    __sys_print("b (-10): ");
+    __sys_print_int(b);
+    __sys_print("\n");
+    
+    let abs_a = abs(a);
+    __sys_print("abs(10): ");
+    __sys_print_int(abs_a);
+    __sys_print("\n");
+    
+    let abs_b = abs(b);
+    __sys_print("abs(-10): ");
+    __sys_print_int(abs_b);
+    __sys_print("\n");
+    
+    if (abs_b == 10) {
+        __sys_print("SUCCESS\n");
+        return 0;
+    } else {
+        __sys_print("FAILURE\n");
+        return 1;
+    }
+}

@@ -1,0 +1,12 @@
+// test_package.ar
+fn main() {
+    printf("Package Manager Integration Test\n");
+    
+    // Call functions from sample_mod.ar (included automatically via ardium.json)
+    let magic = get_magic_number();
+    printf("Magic number from module: %lld\n", magic);
+    
+    print_status("Manifest integration successful!");
+    
+    return 0;
+}

@@ -1,0 +1,5 @@
+import "Runtime/ARC"
+
+fn main() {
+    return 0;
+}

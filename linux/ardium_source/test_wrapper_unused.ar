@@ -1,0 +1,8 @@
+extern fn CoreUI_Init();
+
+fn agui() { CoreUI_Init(); }
+
+fn main() {
+    print("Unused Wrapper Test\n")
+    return 0;
+}

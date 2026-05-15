@@ -1,0 +1,50 @@
+// tests/production_suite.ar
+// Verifies core functionality for "Production Ready" status.
+
+import "CoreMath"
+import "CoreString"
+import "System"
+
+fn main() {
+    println("======================================");
+    println("   Ardium Production Verification     ");
+    println("======================================");
+
+    // 1. Math Test
+    let v = 100.0;
+    println("[TEST] Math...");
+    let s = sqrt(v);
+    if (s == 10.0) { println("  - sqrt: PASS"); } else { println("  - sqrt: FAIL"); }
+    
+    let m = max(10, 20);
+    if (m == 20) { println("  - max: PASS"); } else { println("  - max: FAIL"); }
+
+    // 2. String Test
+    println("[TEST] String...");
+    let str1 = "Hello";
+    let str2 = "World";
+    let joined = concat(str1, str2);
+    println(joined);
+    
+    if (streq(joined, "HelloWorld")) { 
+        println("  - concat: PASS"); 
+    } else { 
+        println("  - concat: FAIL"); 
+    }
+
+    // 3. System Test
+    println("[TEST] System...");
+    let t = clock();
+    println(t);
+    // Do a small loop to consume time
+    let i = 0;
+    while (i < 100000) { i = i + 1; }
+    let t2 = clock();
+    
+    if (t2 >= t) { println("  - clock: PASS"); } else { println("  - clock: FAIL"); }
+
+    println("======================================");
+    println("   ALL SYSTEMS NOMINAL");
+    println("======================================");
+    return 0;
+}

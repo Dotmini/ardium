@@ -1,0 +1,23 @@
+import Foundation
+import AppKit
+
+extern fn ardium_nslog(s);
+extern fn init_apple_gui();
+extern fn create_apple_window(title, x, y, w, h);
+extern fn run_apple_gui();
+
+fn main() {
+    println("🚀 ARDIUM APPLE GUI FRAME TEST");
+    
+    init_apple_gui();
+    ardium_nslog("Hello from Ardium via real Cocoa bridge!");
+    
+    create_apple_window("Ardium Phantom Window", 100, 100, 800, 600);
+    
+    println("✅ GUI Window Initialized. Entering Event Loop...");
+    println("(Note: The app will stay open until you stop it.)");
+    
+    run_apple_gui();
+    
+    return 0;
+}

@@ -1,0 +1,12 @@
+(library
+ (name ardium_core)
+ (public_name ardium)
+ (libraries core str llvm llvm.analysis llvm.bitwriter llvm.target llvm.executionengine llvm.all_backends ctypes)
+ (foreign_stubs (language c) (names jit_stubs))
+ (c_library_flags (-framework Cocoa -framework Accelerate -L/Users/dotmini/Documents/ardium/runtime/build -lardium -Wl,-rpath,/Users/dotmini/Documents/ardium/runtime/build)))
+
+(menhir
+ (modules parser))
+
+(ocamllex
+ (modules lexer))

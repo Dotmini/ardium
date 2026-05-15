@@ -1,0 +1,89 @@
+@export fn init_gui() {
+    __sys_init_gui();
+}
+
+@export fn create_window(title, width, height) {
+    __sys_create_window(title, 0, 0, width, height);
+}
+
+@export fn run_gui() {
+    __sys_run_gui();
+}
+
+// Layout Primitives (Lambda-based)
+@export fn vstack(spacing, alignment, content_fn) {
+    __sys_begin_vstack(spacing, alignment);
+    content_fn();
+    __sys_end_stack();
+}
+
+@export fn hstack(spacing, alignment, content_fn) {
+    __sys_begin_hstack(spacing, alignment);
+    content_fn();
+    __sys_end_stack();
+}
+
+@export fn zstack(content_fn) {
+    __sys_begin_zstack();
+    content_fn();
+    __sys_end_stack();
+}
+
+@export fn HStack(spacing, alignment, content_fn) {
+    __sys_begin_hstack(spacing, alignment);
+    content_fn();
+    __sys_end_stack();
+}
+
+@export fn ZStack(content_fn) {
+    __sys_begin_zstack();
+    content_fn();
+    __sys_end_stack();
+}
+
+// Widgets
+@export fn Text(text) {
+    __sys_draw_text(text, 0, 0, 14, 0, 0);
+}
+
+@export fn Button(label) {
+    __sys_draw_button(label, 0, 0, 0, 0, 0);
+}
+
+@export fn TextField(placeholder) {
+    __sys_draw_textfield(placeholder, 0, 0, 200, 24, 0);
+}
+
+@export fn Image(path, width, height) {
+    __sys_draw_image(path, 0, 0, width, height);
+}
+
+// Internal Syscalls
+extern fn __sys_init_gui();
+extern fn __sys_create_window(title, x, y, w, h);
+extern fn __sys_run_gui();
+extern fn __sys_begin_vstack(spacing, alignment);
+extern fn __sys_begin_hstack(spacing, alignment);
+extern fn __sys_begin_zstack();
+extern fn __sys_end_stack();
+extern fn __sys_draw_text(text, x, y, size, bold, centered);
+extern fn __sys_draw_button(label, x, y, w, h, callback);
+extern fn __sys_draw_textfield(placeholder, x, y, w, h, id);
+extern fn __sys_draw_image(path, x, y, w, h);
+// import "GUI"
+
+fn main() {
+    init_gui();
+    create_window("Ardium Layout Test", 400, 300);
+
+    // Main VSTACK
+    vstack(20, 1, fn() { 
+        Text("Hello from VStack!");
+        Button("Button 1");
+        Button("Button 2");
+        TextField("Input");
+    });
+
+    run_gui();
+    return 0;
+}

@@ -1,0 +1,23 @@
+// Test Optional Semicolons
+// No semicolons used!
+
+fn main() {
+    print("Start\n")
+    
+    let a = 10
+    let b = 20
+    
+    if (a < b) {
+        print("a is less than b\n")
+        print("Inside Block\n")
+    } else {
+        print("Should not be here\n")
+    }
+    
+    // Test multiple newlines are skipped
+    
+    
+    print("After newlines\n")
+    
+    return 0
+}

@@ -1,0 +1,160 @@
+// stdlib/Runtime/Memory.ar
+// Ardium Self-Hosting Runtime: Memory Management
+// Pure Ardium implementation of arena allocator and memory utilities
+
+// Arena allocator for fast memory allocation
+let ARENA_SIZE = 16777216  // 16MB default
+let ARENA_COUNT = 0
+let ARENA_LIST = 0
+
+struct Arena {
+    base: int       // Base pointer from __sys_malloc
+    offset: int     // Current offset
+    size: int       // Total size
+    next: int       // Next arena in chain
+}
+
+// Initialize arena system
+fn Memory_init() {
+    ARENA_LIST = Arena_new(ARENA_SIZE)
+    ARENA_COUNT = 1
+}
+
+// Create a new arena
+fn Arena_new(size: int) -> int {
+    let base = __sys_malloc(size)
+    if (base == 0) {
+        __sys_println("FATAL: Failed to allocate arena")
+        return 0
+    }
+    
+    // Allocate arena header
+    let arena = __sys_malloc(32)  // sizeof(Arena)
+    __builtin_poke(arena + 0, base)      // base
+    __builtin_poke(arena + 8, 0)         // offset
+    __builtin_poke(arena + 16, size)     // size
+    __builtin_poke(arena + 24, 0)        // next
+    
+    return arena
+}
+
+// Allocate from arena (fast path)
+fn Arena_alloc(arena: int, size: int) -> int {
+    let offset = __builtin_peek(arena + 8)
+    let total_size = __builtin_peek(arena + 16)
+    let new_offset = offset + size
+    
+    if (new_offset > total_size) {
+        return 0  // Arena full
+    }
+    
+    __builtin_poke(arena + 8, new_offset)
+    let base = __builtin_peek(arena + 0)
+    return base + offset
+}
+
+// Main allocation function (public API)
+fn alloc(size: int) -> int {
+    // Align to 8 bytes
+    let aligned_size = (size + 7) / 8 * 8
+    
+    // Try current arena
+    let ptr = Arena_alloc(ARENA_LIST, aligned_size)
+    if (ptr != 0) {
+        return ptr
+    }
+    
+    // Need new arena
+    let new_arena = Arena_new(ARENA_SIZE)
+    if (new_arena == 0) {
+        return 0  // Out of memory
+    }
+    
+    // Link to chain
+    __builtin_poke(new_arena + 24, ARENA_LIST)
+    ARENA_LIST = new_arena
+    ARENA_COUNT = ARENA_COUNT + 1
+    
+    // Allocate from new arena
+    return Arena_alloc(new_arena, aligned_size)
+}
+
+// Reset all arenas (keeping memory allocated)
+fn Memory_reset() {
+    let current = ARENA_LIST
+    while (current != 0) {
+        __builtin_poke(current + 8, 0)  // offset = 0
+        current = __builtin_peek(current + 24)  // next
+    }
+}
+
+// Free all arenas
+fn Memory_destroy() {
+    let current = ARENA_LIST
+    while (current != 0) {
+        let next = __builtin_peek(current + 24)
+        let base = __builtin_peek(current + 0)
+        __sys_free(base)
+        __sys_free(current)
+        current = next
+    }
+    ARENA_LIST = 0
+    ARENA_COUNT = 0
+}
+
+// Memory statistics
+fn Memory_stats() {
+    let total_size = 0
+    let used_size = 0
+    let current = ARENA_LIST
+    
+    while (current != 0) {
+        let size = __builtin_peek(current + 16)
+        let offset = __builtin_peek(current + 8)
+        total_size = total_size + size
+        used_size = used_size + offset
+        current = __builtin_peek(current + 24)
+    }
+    
+    __sys_print("Memory Stats:\n")
+    __sys_print("  Arenas: ")
+    print_int(ARENA_COUNT)
+    __sys_print("\n  Total: ")
+    print_int(total_size)
+    __sys_print(" bytes\n  Used: ")
+    print_int(used_size)
+    __sys_print(" bytes\n")
+}
+
+// Helper: print integer
+fn print_int(n: int) {
+    if (n == 0) {
+        __sys_print("0")
+        return 0
+    }
+    
+    if (n < 0) {
+        __sys_print("-")
+        n = 0 - n
+    }
+    
+    print_int_helper(n)
+    return 0
+}
+
+fn print_int_helper(n: int) {
+    if (n == 0) {
+        return 0
+    }
+    
+    print_int_helper(n / 10)
+    
+    let digit = n - (n / 10 * 10)
+    let c = digit + 48  // ASCII '0'
+    
+    __sys_write(1, c, 1)  // TODO: Fix this - needs char buffer
+    return 0
+}
+
+// Initialize on module load
+Memory_init()

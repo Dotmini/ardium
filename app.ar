@@ -1,0 +1,59 @@
+import "Core"
+import "CoreUI"
+import "CoreNetwork"
+
+// 1. Global State
+@GLOBAL(AppState)
+var btc_price = "Loading...";
+
+@GLOBAL(AppState)
+var last_update = "-";
+
+// 2. Network Function
+fn fetch_price() {
+    let response = Fetch("https://api.coindesk.com/v1/bpi/currentprice.json");
+    let price = json_extract(response, "rate");
+    
+    // Update Global Globals (Direct assignment supported for globals?)
+    // In Ardium, modifying global var needs careful handling (or assume it works)
+    btc_price = price;
+    last_update = get_current_time();
+    
+    println("Price Updated: " + btc_price);
+}
+
+// 3. UI Layout
+@VClass
+fn PriceCard() {
+    text("Bitcoin (BTC)", 24, 1);
+    text(btc_price, 48, 1);
+    text("Last Update: " + last_update, 12, 0);
+}
+
+@HClass
+fn ControlPanel() {
+    Button("Refresh 🔄", resolve_symbol("fetch_price"));
+    // Button("Exit ❌", resolve_symbol("exit_app")); 
+}
+
+// Hoisted MainView
+@VClass
+fn MainView() {
+    PriceCard();
+    ControlPanel();
+}
+
+// 4. Main Loop
+fn main() {
+    init_apple_gui();
+    viewer("Crypto Tracker", 100, 100, 400, 300);
+    set_modern_background(); 
+
+    MainView();
+    
+    // Initial Fetch
+    fetch_price();
+
+    run_apple_gui();
+    return 0;
+}

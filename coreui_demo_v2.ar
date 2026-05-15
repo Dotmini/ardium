@@ -1,0 +1,45 @@
+import "Core"
+import "CoreUI"
+
+// State
+let user_ptr = 0
+let pass_ptr = 0
+
+fn on_login() {
+    print("🖱️ Login Button Clicked!\n")
+    let u_handle = peek(resolve_symbol("user_ptr"))
+    let u_text = get_input_value(u_handle)
+    
+    print("👤 Attempting login for: " + u_text + "\n")
+    
+    if (u_text == "admin") {
+        print("✅ Access Granted!\n")
+    } else {
+        print("❌ Access Denied!\n")
+    }
+}
+
+fn LoginFields() {
+    HStack(fn() {
+        Text("User:")
+        let tf = TextField("Enter ID")
+        poke(resolve_symbol("user_ptr"), tf)
+    })
+}
+
+fn Content() {
+    VStack(fn() {
+        Image("logo.png")
+        Title("SPU AI CLUB")
+        Subtitle("Ardium 2.0 Ascension")
+        
+        LoginFields()
+        
+        Button("Login", resolve_symbol("on_login"))
+    })
+}
+
+fn main() {
+    App("SPU AI CLUB", resolve_symbol("Content"))
+    return 0
+}

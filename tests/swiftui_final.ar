@@ -1,0 +1,20 @@
+// AppleUI.ar - Functional Bridge (CamelCase)
+
+@export fn createApplication(title) {
+    swiftCreateApp(title);
+    return 0; 
+}
+
+@export fn addButton(label) {
+    swiftAddButton(label);
+}
+
+@export fn runApplication() {
+    swiftRunApp();
+}
+
+// Externs (CamelCase)
+extern fn swiftCreateApp(title);
+extern fn swiftAddButton(label);
+extern fn swiftRunApp();
+fn main() { createApplication("Native Swift App"); addButton("Button"); runApplication(); return 0; }

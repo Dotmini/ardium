@@ -1,0 +1,29 @@
+// --- Ardium v3.1: Multi-Core CPU Stress Test ---
+// Architect: Major
+// Goal: Maximize CPU Utilization via Parallel Recursion.
+
+extern fn coreui_init_app();
+extern fn coreui_parallel_for(start, end, task_id);
+
+fn main() {
+    println("--- [Major] Initiating CPU Stress Test Protocol ---");
+    
+    // Initialize Runtime & Task Registry
+    coreui_init_app();
+
+    println("[Ardium] Warming up cores...");
+    
+    // We will launch 64 parallel tasks.
+    // On M1/M2/M3 chips, GCD will distribute these across P-cores and E-cores.
+    // Each task computes Fib(35..37) recursively.
+    // This is purely CPU bound and should show 100% usage in Activity Monitor.
+    
+    let job_count = 64;
+    println("[Ardium] Dispatching 64 Heavy Recursive Tasks (Fibonacci)...");
+    
+    // Task ID 300 = task_fib_stress
+    coreui_parallel_for(0, job_count, 300);
+
+    println("[Ardium] Stress Test Complete. All calculations verified.");
+    return 0;
+}

@@ -1,0 +1,19 @@
+fn main() {
+    // 1. Allocate raw memory (4 bytes)
+    let ptr = malloc(4)
+    print("Allocated at: ")
+    print(ptr)
+    print("\n")
+
+    // 2. Direct Register Access (Simulated with heap)
+    // Write 12345678 to address
+    poke(ptr, 12345678)
+    print("Poked value.\n")
+
+    // 3. Read back
+    let val = peek(ptr)
+    print(val) // Should print 12345678
+    print("\n")
+
+    return 0
+}

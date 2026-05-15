@@ -1,0 +1,187 @@
+// tests/language_hardcore.ar - ทดสอบภาษาแบบโหด
+
+fn main() {
+    __sys_println("💀 HARDCORE LANGUAGE TEST 💀")
+    __sys_println("============================")
+    __sys_println("")
+    
+    // Test 1: Complex expressions
+    test_expressions()
+    
+    // Test 2: Nested structures
+    test_nested_structures()
+    
+    // Test 3: Function pointers
+    test_function_pointers()
+    
+    // Test 4: Edge cases
+    test_edge_cases()
+    
+    // Test 5: Performance critical code
+    test_performance()
+    
+    __sys_println("")
+    __sys_println("🏆 HARDCORE TESTS PASSED! 🏆")
+    
+    return 0
+}
+
+// ทดสอบ expressions ซับซ้อน
+fn test_expressions() {
+    __sys_print("Test 1: Complex expressions... ")
+    
+    let a = 10
+    let b = 20
+    let c = 30
+    
+    // Nested arithmetic
+    let result = ((a + b) * c - (a * b)) / (c - b)
+    
+    // Expected: ((30) * 30 - 200) / 10 = (900 - 200) / 10 = 70
+    if (result == 70) {
+        __sys_println("PASSED ✓")
+    } else {
+        __sys_println("FAILED")
+    }
+    
+    return 0
+}
+
+// ทดสอบ nested structures
+fn test_nested_structures() {
+    __sys_print("Test 2: Nested structures... ")
+    
+    // สร้าง hash table ที่เก็บ arrays
+    let map = HashMap_new(8, 8)
+    
+    let i = 0
+    while (i < 10) {
+        let arr = Array_new(8)
+        
+        let j = 0
+        while (j < 5) {
+            let val = alloc(8)
+            __builtin_poke(val, i * 10 + j)
+            Array_push(arr, val)
+            j = j + 1
+        }
+        
+        let key = alloc(8)
+        __builtin_poke(key, i)
+        HashMap_put(map, key, arr)
+        
+        i = i + 1
+    }
+    
+    // Verify
+    let test_key = alloc(8)
+    __builtin_poke(test_key, 5)
+    let test_arr = HashMap_get(map, test_key)
+    
+    if (test_arr != 0) {
+        let len = Array_length(test_arr)
+        if (len == 5) {
+            __sys_println("PASSED ✓")
+            return 0
+        }
+    }
+    
+    __sys_println("FAILED")
+    return 0
+}
+
+// ทดสอบ function pointers
+fn test_function_pointers() {
+    __sys_print("Test 3: Function pointers... ")
+    
+    let add_fn = resolve_symbol("add_numbers")
+    let mul_fn = resolve_symbol("multiply_numbers")
+    
+    if (add_fn != 0) {
+        if (mul_fn != 0) {
+            __sys_println("PASSED ✓")
+            return 0
+        }
+    }
+    
+    __sys_println("FAILED")
+    return 0
+}
+
+fn add_numbers(a: int, b: int) -> int {
+    return a + b
+}
+
+fn multiply_numbers(a: int, b: int) -> int {
+    return a * b
+}
+
+// ทดสอบ edge cases
+fn test_edge_cases() {
+    __sys_print("Test 4: Edge cases... ")
+    
+    // Test 1: Division by near-zero
+    let x = 1000000
+    let y = 1
+    let result1 = x / y
+    
+    // Test 2: Large numbers
+    let big1 = 999999999
+    let big2 = 2
+    let result2 = big1 + big2
+    
+    // Test 3: Negative numbers
+    let neg1 = 0 - 100
+    let neg2 = 0 - 50
+    let result3 = neg1 + neg2
+    
+    if (result1 == 1000000) {
+        if (result3 == (0 - 150)) {
+            __sys_println("PASSED ✓")
+            return 0
+        }
+    }
+    
+    __sys_println("FAILED")
+    return 0
+}
+
+// ทดสอบ performance critical code
+fn test_performance() {
+    __sys_print("Test 5: Performance (matrix-like ops)... ")
+    
+    // Simulate matrix operations
+    let size = 50
+    let matrix = __sys_malloc(size * size * 8)
+    
+    // Initialize
+    let i = 0
+    while (i < size) {
+        let j = 0
+        while (j < size) {
+            let idx = i * size + j
+            __builtin_poke(matrix + (idx * 8), i * j)
+            j = j + 1
+        }
+        i = i + 1
+    }
+    
+    // Sum all elements
+    let sum = 0
+    i = 0
+    while (i < size * size) {
+        let val = __builtin_peek(matrix + (i * 8))
+        sum = sum + val
+        i = i + 1
+    }
+    
+    __sys_free(matrix)
+    
+    if (sum > 0) {
+        __sys_println("PASSED ✓")
+    } else {
+        __sys_println("FAILED")
+    }
+    
+    return 0
+}

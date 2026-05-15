@@ -1,0 +1,10 @@
+// stdlib/CoreKits.ar - Ardium CoreKits Framework (Utilities)
+
+fn List() {
+    // Basic dynamic list structure using memory pointers
+    return malloc(8 * 10) // 10 slots
+}
+
+fn Log(msg) {
+    print("[LOG] " + msg + "\n")
+}

@@ -1,0 +1,45 @@
+// --- Ardium v4.0: God View (Metal + AI + Hot-Reload) ---
+// Architect: Major
+
+extern fn coreui_init_metal();
+extern fn metal_create_system(count, w, h) -> i64;
+extern fn coreui_create_metal_window(title, sys_id);
+extern fn coreui_load_logic(path);
+extern fn coreui_run_loop();
+extern fn ai_get_face(x_ptr, y_ptr, conf_ptr);
+
+// Entry Point
+fn main() {
+    println("--- [Major] Initializing Ardium v4.0 God-View ---");
+    
+    // 1. Initialize Metal GPU Engine
+    coreui_init_metal();
+
+    // 2. Allocate 1 Million Particles (Shared Memory)
+    // 1,000,000 * 32 bytes = 32 MB
+    println("[Ardium] Allocating 1,000,000 Particles...");
+    let sys_id = metal_create_system(1000000, 1024.0, 768.0);
+
+    // 3. Create 4K Visualization Window
+    coreui_create_metal_window("Ardium v4.0 [METAL + COREML]", sys_id);
+
+    // 4. Hot-Reload Logic
+    // Load the dynamic logic library. We assume the current running process is the host,
+    // and we are loading extensions. But here 'main' IS the app.
+    // In a full Hot-Reload workflow, 'on_tick' would be in a separate .dylib 
+    // recompiled by 'arc watch'. 
+    // For this demo, we simulate the environment ready for it.
+    
+    println("[Ardium] Core Systems Online. Waiting for AI Input...");
+    
+    coreui_run_loop();
+    return 0;
+}
+
+// Logic Function (Target for Hot Reloading)
+// This function would be in 'logic.ar' in a real hot-reload scenario
+fn on_tick() {
+    // This logic is currently executed inside the Metal View Draw Loop via C++ bridge
+    // But we define it here to show structure.
+    return 0;
+}

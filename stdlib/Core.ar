@@ -1,0 +1,20 @@
+// stdlib/Core.ar - Ardium Core Framework
+// Uses C++ Runtime for robust IO.
+
+extern fn ardium_print(msg)
+extern fn ardium_println(msg)
+
+fn print(msg) {
+    ardium_print(msg);
+}
+
+fn println(msg) {
+    ardium_println(msg);
+}
+
+extern fn ardium_init_runtime()
+
+fn ardiumInit() {
+    ardium_init_runtime();
+    return 0;
+}

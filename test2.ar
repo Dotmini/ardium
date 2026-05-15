@@ -1,0 +1,4 @@
+fn main() {
+  let x = 16.0;
+  return 0;
+}

@@ -1,0 +1,43 @@
+fn main() {
+    println("========================================");
+    println("       ARSENAL INTELLIGENCE SYSTEM      ");
+    println("          CORE TYPE: ARDIUM             ");
+    println("    SPU AI CLUB - OFFICIAL RELEASE      ");
+    println("========================================");
+    
+    // 1. โชว์การจัดการข้อความ (Strings)
+    println("[STATUS] ENGINE: ONLINE");
+    println("[USER]   AUTHOR: DOTMINI");
+    
+    // 2. โชว์การจองหน่วยความจำ (Memory Allocation)
+    // ส่วนนี้จะโชว์เลข 0x... ที่เพื่อนๆ จะต้องทึ่ง
+    let m1 = malloc(8);
+    let m2 = malloc(8);
+    let m3 = malloc(8);
+    
+    print("[MEM] STACK_BASE : ");
+    println(m1);
+    
+    print("[MEM] DATA_SLOT  : ");
+    println(m2);
+    
+    print("[MEM] LOGIC_PTR  : ");
+    println(m3);
+    
+    // 3. โชว์การคำนวณ (Logic Processing)
+    let x = 10;
+    let y = 20;
+    let res = x + y;
+    
+    println("[CAL] PROCESSING: 10 + 20...");
+    println("[RES] RESULT: ");
+    println(res);
+
+    if (res == 30) {
+        println("[STS] SYSTEM STATUS: STABLE");
+    }
+
+    println("========================================");
+    println("     (C) 2024 ARSENAL ENGINE PROJECT    ");
+    println("========================================");
+}

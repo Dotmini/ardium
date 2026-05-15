@@ -1,0 +1,145 @@
+// stdlib/Runtime/IO.ar
+// Ardium Self-Hosting Runtime: File I/O
+// Pure Ardium file operations (wrapping syscalls)
+
+import "Runtime/String"
+
+// File flags (match POSIX)
+let O_RDONLY = 0
+let O_WRONLY = 1
+let O_RDWR = 2
+let O_CREAT = 512
+let O_TRUNC = 1024
+let O_APPEND = 8
+
+// File descriptor wrapper
+struct File {
+    fd: int         // File descriptor
+    path: int       // Path string
+    flags: int      // Open flags
+}
+
+// Open file
+fn File_open(path: int, flags: int) -> int {
+    let cstr = String_cstr(path)
+    let fd = __sys_open(cstr, flags, 438)  // 0666 in octal
+    
+    if (fd < 0) {
+        return 0  // Error
+    }
+    
+    let file = alloc(24)  // sizeof(File)
+    __builtin_poke(file + 0, fd)
+    __builtin_poke(file + 8, path)
+    __builtin_poke(file + 16, flags)
+    
+    return file
+}
+
+// Close file
+fn File_close(file: int) -> int {
+    let fd = __builtin_peek(file + 0)
+    return __sys_close(fd)
+}
+
+// Read bytes from file
+fn File_read(file: int, buffer: int, size: int) -> int {
+    let fd = __builtin_peek(file + 0)
+    return __sys_read(fd, buffer, size)
+}
+
+// Write bytes to file
+fn File_write(file: int, data: int, size: int) -> int {
+    let fd = __builtin_peek(file + 0)
+    return __sys_write(fd, data, size)
+}
+
+// Read entire file as string
+fn File_read_all(path: int) -> int {
+    let file = File_open(path, O_RDONLY)
+    if (file == 0) {
+        return 0
+    }
+    
+    // Get file size
+    let fd = __builtin_peek(file + 0)
+    let size = __sys_lseek(fd, 0, 2)  // SEEK_END
+    __sys_lseek(fd, 0, 0)  // SEEK_SET
+    
+    // Allocate buffer
+    let buffer = alloc(size + 1)
+    if (buffer == 0) {
+        File_close(file)
+        return 0
+    }
+    
+    // Read file
+    let bytes_read = File_read(file, buffer, size)
+    File_close(file)
+    
+    if (bytes_read < 0) {
+        return 0
+    }
+    
+    // Null terminate
+    __builtin_poke(buffer + bytes_read, 0)
+    
+    return String_from_bytes(buffer, bytes_read)
+}
+
+// Write string to file
+fn File_write_all(path: int, content: int) -> int {
+    let file = File_open(path, O_WRONLY + O_CREAT + O_TRUNC)
+    if (file == 0) {
+        return -1
+    }
+    
+    let data = String_cstr(content)
+    let size = String_length(content)
+    
+    let bytes_written = File_write(file, data, size)
+    File_close(file)
+    
+    return bytes_written
+}
+
+// Append string to file
+fn File_append(path: int, content: int) -> int {
+    let file = File_open(path, O_WRONLY + O_CREAT + O_APPEND)
+    if (file == 0) {
+        return -1
+    }
+    
+    let data = String_cstr(content)
+    let size = String_length(content)
+    
+    let bytes_written = File_write(file, data, size)
+    File_close(file)
+    
+    return bytes_written
+}
+
+// Check if file exists
+fn File_exists(path: int) -> int {
+    let file = File_open(path, O_RDONLY)
+    if (file == 0) {
+        return 0  // Does not exist
+    }
+    File_close(file)
+    return 1  // Exists
+}
+
+// STDIO helpers
+fn println(msg: int) {
+    __sys_write(1, String_cstr(msg), String_length(msg))
+    __sys_print("\n")
+}
+
+fn print(msg: int) {
+    __sys_write(1, String_cstr(msg), String_length(msg))
+}
+
+fn eprintln(msg: int) {
+    __sys_write(2, String_cstr(msg), String_length(msg))
+    __sys_write(2, "\n", 1)
+}

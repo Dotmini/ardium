@@ -1,0 +1,2 @@
+extern fn swiftRunApp();
+fn main() { swiftRunApp(); return 0; }

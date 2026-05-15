@@ -1,0 +1,5 @@
+@interrupt
+fn handler() {
+    // Direct hardware control
+    ioport_out(0x60, 0xFF);
+}

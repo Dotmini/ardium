@@ -1,0 +1,9 @@
+@export
+fn get_magic_number() {
+    return 42;
+}
+
+@export
+fn print_status(msg) {
+    printf("[MODULE] Status: %s\n", msg);
+}

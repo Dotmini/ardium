@@ -1,0 +1,57 @@
+// CoreUI Standard Library
+// Binds to CoreUI Runtime (CoreUI.cpp)
+
+extern fn CoreUI_Init()
+extern fn CoreUI_Window(title, x, y, w, h)
+extern fn CoreUI_Run()
+extern fn CoreUI_Background()
+extern fn CoreUI_Text(content, size, bold)
+extern fn CoreUI_Button(label, callback)
+extern fn CoreUI_Image(path)
+extern fn CoreUI_TextField(placeholder, is_secure)
+extern fn CoreUI_GetInputValue(handle)
+
+// Imperative API
+fn agui() { 
+    CoreUI_Init();
+    return 0;
+}
+
+fn run_apple_gui() { 
+    CoreUI_Run(); 
+    return 0;
+}
+
+fn viewer(title, x, y, w, h) {
+    CoreUI_Window(title, x, y, w, h);
+    return 0;
+}
+
+fn background() { 
+    CoreUI_Background(); 
+    return 0;
+}
+
+fn text(content, size, bold) {
+    CoreUI_Text(content, size, bold);
+    return 0;
+}
+
+fn add_button(label, callback) {
+    CoreUI_Button(label, callback);
+    return 0;
+}
+
+fn add_image(path) {
+    CoreUI_Image(path);
+    return 0;
+}
+
+fn add_textfield(placeholder, is_secure) {
+    CoreUI_TextField(placeholder, is_secure);
+    return 0;
+}
+
+fn get_input_value(handle) {
+    return CoreUI_GetInputValue(handle);
+}

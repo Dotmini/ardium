@@ -1,0 +1,18 @@
+import Core
+
+enum Color {
+    Red,
+    Green,
+    Blue,
+    Custom = 100
+}
+
+let choice = Color.Green;
+
+@External("libc")
+extern fn printf(fmt, ...)
+
+fn main() {
+    printf("Choice is Green (value: %d)\n", choice);
+    return 0;
+}

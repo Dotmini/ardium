@@ -1,0 +1,18 @@
+// stdlib/CoreString.ar - Ardium v2.5.6
+// Uses robust C++ Runtime bindings.
+
+extern fn ardium_strlen(s) -> i64
+extern fn ardium_str_concat(s1, s2) -> ptr
+extern fn ardium_streq(s1, s2) -> i32
+
+fn strlen(s) {
+    return ardium_strlen(s);
+}
+
+fn concat(s1, s2) {
+    return ardium_str_concat(s1, s2);
+}
+
+fn streq(s1, s2) {
+    return ardium_streq(s1, s2);
+}

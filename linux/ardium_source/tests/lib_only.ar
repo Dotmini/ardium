@@ -1,0 +1,48 @@
+@export fn init_gui() {
+    __sys_init_gui();
+}
+
+@export fn create_window(title, width, height) {
+    __sys_create_window(title, 0, 0, width, height);
+}
+
+@export fn run_gui() {
+    __sys_run_gui();
+}
+
+// Layout Primitives
+// Alignment: 0=Leading, 1=Center, 2=Trailing (approx mapping)
+@export fn VStack(spacing, alignment, content_fn) {
+    __sys_begin_vstack(spacing, alignment);
+    content_fn();
+    __sys_end_stack();
+}
+
+@export fn HStack(spacing, alignment, content_fn) {
+    __sys_begin_hstack(spacing, alignment);
+    content_fn();
+    __sys_end_stack();
+}
+
+@export fn ZStack(content_fn) {
+    __sys_begin_zstack();
+    content_fn();
+    __sys_end_stack();
+}
+
+// Widgets
+@export fn Text(text) {
+    __sys_draw_text(text, 0, 0, 14, 0, 0);
+}
+
+@export fn Button(label) {
+    __sys_draw_button(label, 0, 0, 0, 0, 0);
+}
+
+@export fn TextField(placeholder) {
+    __sys_draw_textfield(placeholder, 0, 0, 200, 24, 0);
+}
+
+@export fn Image(path, width, height) {
+    __sys_draw_image(path, 0, 0, width, height);
+}

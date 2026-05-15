@@ -1,0 +1,3 @@
+interrupt fn handler() {
+    ioport_out(0x60, 0xFF);
+}

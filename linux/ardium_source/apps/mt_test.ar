@@ -1,0 +1,64 @@
+// --- Ardium v3.1: Native Multi-threading Test ---
+// Architect: Major
+// Goal: 100% CPU Utilization, Zero UI Lag.
+
+// 1. Concurrency Interface
+// task_id 100: Heavy Math
+// task_id 200: Image Gradient (Parallel Row Processing)
+extern fn coreui_parallel_for(start, end, task_id);
+extern fn coreui_async(task_id);
+extern fn coreui_sync_main(task_id);
+
+// 2. Ownership Interface
+extern fn image_own_buffer(width, height) -> i64;
+extern fn image_drop(id);
+
+// 3. UI Interface
+extern fn coreui_init_app();
+extern fn coreui_create_window(title, w, h) -> i64;
+extern fn coreui_run_loop();
+
+fn main() {
+    println("--- [Major] Initializing Ardium v3.1 MT Engine ---");
+    
+    coreui_init_app(); // Also registers tasks
+
+    // ---------------------------------------------------------
+    // Phase 1: Data Parallelism (The "Speed" Test)
+    // ---------------------------------------------------------
+    println("[Ardium] Allocating 4K Image Buffer (16MB)...");
+    // Image ID 1 is expected by task_id 200
+    let img_id = image_own_buffer(2048, 2048);
+
+    println("[Ardium] Launching Parallel Kernel (All Cores)...");
+    // Processes 2048 rows in parallel using GCD dispatch_apply
+    // This scales to M1/M2/M3 core counts automatically.
+    coreui_parallel_for(0, 2048, 200); 
+    
+    println("[Ardium] Parallel Image Processing Complete.");
+    
+    // Cleanup
+    image_drop(img_id);
+
+    // ---------------------------------------------------------
+    // Phase 2: Background Task (The "Responsiveness" Test)
+    // ---------------------------------------------------------
+    println("[Ardium] Spawning Background Physics Task...");
+    
+    // Run CPU Burn (Task 100) in background thread
+    coreui_async(100);
+
+    // ---------------------------------------------------------
+    // Phase 3: UI Sync (The "Safety" Test)
+    // ---------------------------------------------------------
+    println("[Ardium] Launching Main UI...");
+    let win_id = coreui_create_window("Ardium v3.1 MT", 800, 600);
+    
+    println("[Ardium] Systems Nominal. Entering Run Loop.");
+    // In a real app, coreui_sync_main would be called from inside the async task
+    // to update the UI when done.
+    
+    // coreui_run_loop();
+
+    return 0;
+}

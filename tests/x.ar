@@ -1,0 +1,8 @@
+fn main() {
+    i = 0;
+    loop (i < 10000000) {
+        x = i;
+        i = i + 1;
+    }
+    return 0;
+}

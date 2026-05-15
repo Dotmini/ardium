@@ -1,0 +1,4 @@
+module kernel {
+  header "kernel_mod.h"
+  export *
+}

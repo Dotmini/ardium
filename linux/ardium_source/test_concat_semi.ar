@@ -1,0 +1,9 @@
+extern fn CoreUI_Init();
+
+fn agui() { CoreUI_Init(); }
+
+fn main() {
+    print("Concat Semi Test\n")
+    agui()
+    return 0
+}

@@ -1,0 +1,4 @@
+module test_print {
+  header "test_print.h"
+  export *
+}

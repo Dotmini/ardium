@@ -1,0 +1,23 @@
+import Core
+
+@VClass
+fn MainView() {
+    text("Core StdLib Online", 60, 1);
+    text("Using Alias Functions", 40, 0);
+    text("Aligned with Constants", 24, 0);
+}
+
+fn main() {
+    agui();
+    viewer("Core Test", 100, 100, 800, 600);
+    background();
+    
+    MainView();
+    
+    // Verify constants exist (even if not used in layout functions yet)
+    println("Center Constant Value: ");
+    print(Center); 
+    println("");
+    
+    return 0;
+}

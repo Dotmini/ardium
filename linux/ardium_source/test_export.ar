@@ -1,0 +1,9 @@
+@export
+fn calculate_fast_data(a) {
+    return a * a;
+}
+
+fn main() {
+    println(calculate_fast_data(10));
+    return 0;
+}

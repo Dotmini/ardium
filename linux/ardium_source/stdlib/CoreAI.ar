@@ -1,0 +1,16 @@
+// stdlib/CoreAI.ar - Ardium CoreAI Framework
+
+fn MatMul(A, B, C, N) {
+    // Bridges to Apple Accelerate dgemm
+    ardium_matmul(A, B, C, N)
+}
+
+fn VectorAdd(A, B, C, N) {
+    // Bridge to vDSP_vadd
+    // To be implemented in runtime.m
+}
+
+fn Tensor(shape) {
+    // Stub for future tensor management
+    return resolve_symbol("ardium_tensor_init")
+}

@@ -1,0 +1,17 @@
+// fibonacci.ar
+extern fn print(n);
+
+fn fib(n) {
+    if (n < 2) {
+        return n;
+    } else {
+        return fib(n - 1) + fib(n - 2);
+    }
+}
+
+fn main() {
+    let result = fib(10);
+    show("Fibonacci of 10 is:");
+    show(result);
+    return 0;
+}

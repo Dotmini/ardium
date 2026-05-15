@@ -1,0 +1,10 @@
+extern fn sin(x);
+extern fn sqrt(x);
+
+fn main() {
+    let s = sqrt(16.0);
+    show(s);
+    let si = sin(0.0);
+    show(si);
+    return 0;
+}

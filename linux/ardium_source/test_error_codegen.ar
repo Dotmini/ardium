@@ -1,0 +1,4 @@
+GLOBAL(Config) = (1)
+fn main() {
+  print(GLOBAL.Config.invalid_field)
+}

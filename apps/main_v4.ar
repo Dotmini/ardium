@@ -1,0 +1,31 @@
+// --- Ardium v4.0: Main App ---
+// Architect: Major
+
+extern fn coreui_init_metal();
+extern fn metal_create_system(count, w, h) -> i64;
+extern fn coreui_create_metal_window(title, sys_id);
+extern fn coreui_load_logic(path);
+extern fn coreui_run_loop();
+
+fn main() {
+    println("--- [Major] Ardium v4.0: Metal + CoreML + HotReload ---");
+    
+    // 1. Initialize Metal
+    coreui_init_metal();
+
+    // 2. Allocate 1,000,000 Particles (Zero-Copy Shared Buffer)
+    println("[Ardium] Allocating 1,000,000 Particles...");
+    let sys_id = metal_create_system(1000000, 1024.0, 768.0);
+
+    // 3. Create Window
+    coreui_create_metal_window("Ardium v4.0 [120Hz]", sys_id);
+
+    // 4. Load Logic (Hot Reload)
+    println("[Ardium] Loading Logic Module...");
+    coreui_load_logic("./logic.dylib");
+    
+    println("[Ardium] Entering 120Hz Render Loop. Press Ctrl+C to exit.");
+    coreui_run_loop();
+    
+    return 0;
+}

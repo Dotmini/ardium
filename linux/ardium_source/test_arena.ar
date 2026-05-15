@@ -1,0 +1,14 @@
+fn main() {
+    let p1 = malloc(16);
+    let p2 = malloc(16);
+    
+    println(p1);
+    println(p2);
+    
+    reset_arena();
+    
+    let p3 = malloc(16);
+    println(p3);
+    
+    return 0;
+}

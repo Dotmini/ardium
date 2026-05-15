@@ -1,0 +1,13 @@
+// stdlib/System.ar - System Interactions
+
+extern fn exit(code)
+extern fn system(cmd) -> i32
+extern fn clock() -> i64
+extern fn time(ptr) -> i64
+extern fn sleep(sec) -> i32
+
+fn panic(msg) {
+    println("PANIC: ");
+    println(msg);
+    exit(1);
+}

@@ -1,0 +1,30 @@
+// AppleUI.ar - Functional Bridge
+
+@export fn createApplication(title) {
+    __swift_create_app(title);
+    return 0; // Dummy handle
+}
+
+@export fn addButton(label) {
+    __swift_add_button(label);
+}
+
+@export fn runApplication() {
+    __swift_run_app();
+}
+
+// Externs
+extern fn __swift_create_app(title);
+extern fn __swift_add_button(label);
+extern fn __swift_run_app();
+fn main() {
+    createApplication("Native Swift App");
+    addButton("Button 1");
+    addButton("Button 2");
+    
+    // Testing C-Interop with String
+    addButton("Hello from Ardium");
+
+    runApplication();
+    return 0;
+}

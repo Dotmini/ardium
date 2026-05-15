@@ -1,0 +1,12 @@
+// stdlib/PlaygroundSupport.ar - Ardium PlaygroundSupport
+
+fn Live(view_func) {
+    // Hot-reloading bridge stub
+    print("♨️ Live Preview enabled.\n")
+    view_func()
+}
+
+fn DebugUI() {
+    // Show UI inspector
+    print("🔍 Debug UI Inspector ready.\n")
+}

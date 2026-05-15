@@ -1,0 +1,40 @@
+fn main() {
+    println("=================================");
+    println("      ARDIUM TEST SUITE (x.ar)   ");
+    println("=================================");
+
+    // 1. Basic Variable & Print Test
+    println("[TEST] Variable Assignment");
+    let num1 = 100;
+    let num2 = 200;
+
+    println("Value 1:");
+    println(num1);
+
+    println("Value 2:");
+    println(num2);
+
+    // 2. UI Structure Test
+    println("[TEST] UI Component Layout");
+
+    VClass {
+        println("  -> Rendering VStack");
+        Button("Top Button")
+
+        HClass {
+            println("  -> Rendering HStack inside VStack");
+            Button("Left Option")
+            Button("Right Option")
+        }
+
+        ZClass {
+            println("  -> Rendering ZStack Layer");
+            Button("Background Layer")
+            Button("Foreground Text")
+        }
+    }
+
+    println("=================================");
+    println("   [PASS] ALL CHECKS COMPLETED   ");
+    println("=================================");
+}

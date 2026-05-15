@@ -1,0 +1,4 @@
+fn main() {
+  print("Hello"
+  // Missing closing paren and semicolon (if needed) or just syntax break
+}

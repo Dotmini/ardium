@@ -1,0 +1,1 @@
+fn main() { vstack(20, 1); }

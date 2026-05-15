@@ -1,0 +1,69 @@
+// SynTest.ar - Comprehensive Syntax Test for Ardium
+// Covers: Variables, Control Flow (if/elif/else), Loops (while), Functions, and Structs
+
+struct Point {
+    x: i64,
+    y: i64
+}
+
+// Function with new optional colon syntax
+fn calculate_sum(a, b): {
+    return a + b;
+}
+
+fn main(): {
+    println("=== Ardium Syntax Verification ===");
+
+    // 1. Variables
+    println("\n[1] Testing Variables...");
+    let immutable_val = 10;
+    let mut mutable_val = 20;
+    
+    print("    Immutable: "); println(immutable_val);
+    print("    Mutable (before): "); println(mutable_val);
+    
+    mutable_val = 30;
+    print("    Mutable (after): "); println(mutable_val);
+
+    // 2. Control Flow (if / elif / else) with colons
+    println("\n[2] Testing Control Flow (if/elif/else)...");
+    let score = 75;
+    
+    if score >= 90: {
+        println("    Grade: A");
+    } elif score >= 70: {
+        println("    Grade: B (Expected)");
+    } elif score >= 50: {
+        println("    Grade: C");
+    } else: {
+        println("    Grade: F");
+    }
+
+    // 3. Loops (while) with colons
+    println("\n[3] Testing Loops (while)...");
+    let mut i = 0;
+    while i < 3: {
+        print("    Loop iteration: "); println(i);
+        i = i + 1;
+    }
+
+    // 4. Function Calls
+    println("\n[4] Testing Functions...");
+    let result = calculate_sum(10, 5);
+    print("    10 + 5 = "); println(result);
+
+    // 5. Memory & Structs
+    println("\n[5] Testing Structs & Memory...");
+    let ptr = malloc(16); // Allocate 16 bytes
+    
+    // Global Memory Mapping
+    GLOBAL(ptr) as Point;
+    GLOBAL.x = 100;
+    GLOBAL.y = 200;
+
+    print("    Point.x: "); println(GLOBAL.x);
+    print("    Point.y: "); println(GLOBAL.y);
+
+    println("\n=== Syntax Test Complete ===");
+    return 0;
+}

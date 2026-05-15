@@ -1,0 +1,11 @@
+// Internal Syscalls
+extern fn __sys_init_gui();
+extern fn __sys_create_window(title, x, y, w, h);
+extern fn __sys_run_gui();
+extern fn __sys_begin_vstack(spacing, alignment);
+extern fn __sys_begin_hstack(spacing, alignment);
+extern fn __sys_begin_zstack();
+extern fn __sys_end_stack();
+extern fn __sys_draw_text(text, x, y, size, bold, centered);
+extern fn __sys_draw_button(label, x, y, w, h, callback);
+extern fn __sys_draw_textfield(placeholder, x, y, w, h, id);

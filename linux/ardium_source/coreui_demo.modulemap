@@ -1,0 +1,4 @@
+module coreui_demo {
+  header "coreui_demo.h"
+  export *
+}

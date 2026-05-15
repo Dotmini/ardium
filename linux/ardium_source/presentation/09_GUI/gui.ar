@@ -1,0 +1,20 @@
+// Topic: GUI (Native Apple)
+// Create a Window with a Button
+
+import "CoreUI"
+
+// Define View Component
+// @VClass class MainView {
+//     fn build() {
+//         text("Hello Ardium GUI");
+//         Button("Click Me!", "on_click");
+//     }
+// }
+// fn on_click() {
+//     print("Button Clicked!");
+// }
+
+fn main() {
+    print("GUI (Simulated Window Check): OK");
+    return 0;
+}

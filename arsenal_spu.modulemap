@@ -1,0 +1,4 @@
+module main {
+  header "arsenal_spu.h"
+  export *
+}

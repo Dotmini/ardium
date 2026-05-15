@@ -1,0 +1,4 @@
+module dev {
+  header "dev_test.h"
+  export *
+}

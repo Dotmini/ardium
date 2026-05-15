@@ -1,0 +1,16 @@
+// Topic: Strings
+// Concatenation and Printing
+
+extern fn printf(fmt: string, val: string);
+
+fn main() {
+    var s1 = "Hello";
+    var s2 = " World";
+    
+    // String concatenation using '+' operator
+    // Ardium runtime handles allocation for the result
+    var s3 = s1 + s2;
+    
+    printf("Result: %s\n", s3);
+    return 0;
+}

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Ardium
+Exec=arc
+Icon=ardium
+Type=Application
+Categories=Development;IDE;
+Comment=The Ardium Programming Language Compiler
+Terminal=true
+StartupNotify=true

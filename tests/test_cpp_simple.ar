@@ -1,0 +1,4 @@
+fn main() {
+    println("Simple check");
+    return 0;
+}

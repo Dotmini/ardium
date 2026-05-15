@@ -1,0 +1,9 @@
+import Core
+enum Color {
+    Red,
+    Green,
+    Blue,
+    Custom = 100
+}
+
+let choice = Color.Green;

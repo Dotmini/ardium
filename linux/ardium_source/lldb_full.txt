@@ -1,0 +1,50 @@
+(lldb) target create "./StudentManager"
+Current executable set to '/Users/dotmini/Documents/ardium/StudentManager' (arm64).
+(lldb) run
+2026-01-03 01:38:09.368295+0700 StudentManager[80458:1465361] [WindowTab] Cannot index window tabs due to missing main bundle identifier
+2026-01-03 01:38:20.784691+0700 StudentManager[80458:1465361] [NSCGS] Ignoring request to entangle context after pre-commit
+2026-01-03 01:38:20.784847+0700 StudentManager[80458:1465361] [NSCGS] Ignoring request to entangle context after pre-commit
+2026-01-03 01:38:20.784885+0700 StudentManager[80458:1465361] [NSCGS] Ignoring request to entangle context after pre-commit
+2026-01-03 01:38:20.785107+0700 StudentManager[80458:1465361] [NSCGS] Entangling fence requested after pre-commit
+Process 80458 launched: '/Users/dotmini/Documents/ardium/StudentManager' (arm64)
+Process 80458 stopped
+* thread #1, queue = 'com.apple.main-thread', stop reason = EXC_BAD_ACCESS (code=1, address=0x3acd89a79d40)
+    frame #0: 0x0000000182318120 libobjc.A.dylib`objc_release + 16
+libobjc.A.dylib`objc_release:
+->  0x182318120 <+16>: ldr    x17, [x2, #0x20]
+    0x182318124 <+20>: tbz    w17, #0x2, 0x182318188    ; <+120>
+    0x182318128 <+24>: tbz    w16, #0x0, 0x1823181ac    ; <+156>
+    0x18231812c <+28>: lsr    x17, x16, #55
+Target 0: (StudentManager) stopped.
+(lldb) bt
+* thread #1, queue = 'com.apple.main-thread', stop reason = EXC_BAD_ACCESS (code=1, address=0x3acd89a79d40)
+  * frame #0: 0x0000000182318120 libobjc.A.dylib`objc_release + 16
+    frame #1: 0x0000000186cfb0c4 AppKit`-[_NSWindowTransformAnimation dealloc] + 512
+    frame #2: 0x00000001824353fc libsystem_blocks.dylib`_call_dispose_helpers_excp + 48
+    frame #3: 0x00000001824351c0 libsystem_blocks.dylib`_Block_release + 236
+    frame #4: 0x000000018401fcf0 Foundation`-[NSConcretePointerArray dealloc] + 172
+    frame #5: 0x000000018231fc84 libobjc.A.dylib`AutoreleasePoolPage::releaseUntil(objc_object**) + 204
+    frame #6: 0x000000018231c150 libobjc.A.dylib`objc_autoreleasePoolPop + 244
+    frame #7: 0x000000018c67a62c QuartzCore`CA::Context::commit_transaction(CA::Transaction*, double, double*) + 9256
+    frame #8: 0x000000018c4c543c QuartzCore`CA::Transaction::commit() + 644
+    frame #9: 0x000000018c6abf74 QuartzCore`CA::Transaction::flush_as_runloop_observer(bool) + 140
+    frame #10: 0x0000000187318510 AppKit`stepTransactionFlush + 220
+    frame #11: 0x00000002711182fc UpdateCycle`UC::DriverCore::continueProcessing() + 84
+    frame #12: 0x00000001828049f8 CoreFoundation`__CFRUNLOOP_IS_CALLING_OUT_TO_A_SOURCE0_PERFORM_FUNCTION__ + 28
+    frame #13: 0x000000018280498c CoreFoundation`__CFRunLoopDoSource0 + 172
+    frame #14: 0x00000001828046f8 CoreFoundation`__CFRunLoopDoSources0 + 232
+    frame #15: 0x0000000182803388 CoreFoundation`__CFRunLoopRun + 820
+    frame #16: 0x00000001828bde34 CoreFoundation`_CFRunLoopRunSpecificWithOptions + 532
+    frame #17: 0x000000018f2f3790 HIToolbox`RunCurrentEventLoopInMode + 316
+    frame #18: 0x000000018f2f6ab8 HIToolbox`ReceiveNextEventCommon + 488
+    frame #19: 0x000000018f480b64 HIToolbox`_BlockUntilNextEventMatchingListInMode + 48
+    frame #20: 0x000000018711cb5c AppKit`_DPSBlockUntilNextEventMatchingListInMode + 236
+    frame #21: 0x0000000186c16e48 AppKit`_DPSNextEvent + 588
+    frame #22: 0x00000001876e1d0c AppKit`-[NSApplication(NSEventRouting) _nextEventMatchingEventMask:untilDate:inMode:dequeue:] + 688
+    frame #23: 0x00000001876e1a18 AppKit`-[NSApplication(NSEventRouting) nextEventMatchingMask:untilDate:inMode:dequeue:] + 72
+    frame #24: 0x0000000186c0f780 AppKit`-[NSApplication run] + 368
+    frame #25: 0x000000010002634c libardium.dylib`__sys_run_gui + 24
+    frame #26: 0x0000000100000750 StudentManager`run + 8
+    frame #27: 0x00000001000008d0 StudentManager`main + 36
+    frame #28: 0x000000018239dd54 dyld`start + 7184
+(lldb) quit

@@ -1,0 +1,148 @@
+// stdlib/Runtime/Array.ar
+// Ardium Self-Hosting Runtime: Dynamic Arrays
+// Pure Ardium growable array implementation
+
+import "Runtime/Memory"
+
+struct Array {
+    data: int       // Pointer to elements
+    length: int     // Current number of elements
+    capacity: int   // Allocated capacity
+    elem_size: int  // Size of each element
+}
+
+// Create new array
+fn Array_new(elem_size: int) -> int {
+    let capacity = 16  // Initial capacity
+    let data = alloc(capacity * elem_size)
+    
+    if (data == 0) {
+        return 0  // OOM
+    }
+    
+    let arr = alloc(32)  // sizeof(Array)
+    __builtin_poke(arr + 0, data)
+    __builtin_poke(arr + 8, 0)           // length = 0
+    __builtin_poke(arr + 16, capacity)  
+    __builtin_poke(arr + 24, elem_size)
+    
+    return arr
+}
+
+// Get array length
+fn Array_length(arr: int) -> int {
+    return __builtin_peek(arr + 8)
+}
+
+// Get array capacity
+fn Array_capacity(arr: int) -> int {
+    return __builtin_peek(arr + 16)
+}
+
+// Grow array capacity
+fn Array_grow(arr: int) {
+    let old_capacity = __builtin_peek(arr + 16)
+    let new_capacity = old_capacity * 2
+    let elem_size = __builtin_peek(arr + 24)
+    
+    let new_data = alloc(new_capacity * elem_size)
+    if (new_data == 0) {
+        return 0  // OOM
+    }
+    
+    // Copy old data
+    let old_data = __builtin_peek(arr + 0)
+    let length = __builtin_peek(arr + 8)
+    __sys_memcpy(new_data, old_data, length * elem_size)
+    
+    // Update array
+    __builtin_poke(arr + 0, new_data)
+    __builtin_poke(arr + 16, new_capacity)
+    
+    return 0
+}
+
+// Append element
+fn Array_push(arr: int, elem: int) {
+    let length = __builtin_peek(arr + 8)
+    let capacity = __builtin_peek(arr + 16)
+    
+    if (length >= capacity) {
+        Array_grow(arr)
+    }
+    
+    let elem_size = __builtin_peek(arr + 24)
+    let data = __builtin_peek(arr + 0)
+    
+    // Copy element
+    __sys_memcpy(data + (length * elem_size), elem, elem_size)
+    
+    // Update length
+    __builtin_poke(arr + 8, length + 1)
+}
+
+// Get element at index
+fn Array_get(arr: int, index: int) -> int {
+    let length = __builtin_peek(arr + 8)
+    
+    if (index < 0) {
+        return 0
+    }
+    if (index >= length) {
+        return 0
+    }
+    
+    let elem_size = __builtin_peek(arr + 24)
+    let data = __builtin_peek(arr + 0)
+    
+    return data + (index * elem_size)
+}
+
+// Set element at index
+fn Array_set(arr: int, index: int, elem: int) {
+    let length = __builtin_peek(arr + 8)
+    
+    if (index < 0) {
+        return 0
+    }
+    if (index >= length) {
+        return 0
+    }
+    
+    let elem_size = __builtin_peek(arr + 24)
+    let data = __builtin_peek(arr + 0)
+    
+    __sys_memcpy(data + (index * elem_size), elem, elem_size)
+    return 0
+}
+
+// Pop last element
+fn Array_pop(arr: int) -> int {
+    let length = __builtin_peek(arr + 8)
+    
+    if (length == 0) {
+        return 0
+    }
+    
+    let new_length = length - 1
+    __builtin_poke(arr + 8, new_length)
+    
+    return Array_get(arr, new_length)
+}
+
+// Clear array
+fn Array_clear(arr: int) {
+    __builtin_poke(arr + 8, 0)
+}
+
+// For each element
+fn Array_foreach(arr: int, callback: int) {
+    let length = __builtin_peek(arr + 8)
+    let i = 0
+    
+    while (i < length) {
+        let elem = Array_get(arr, i)
+        // TODO: Call callback with elem
+        i = i + 1
+    }
+}

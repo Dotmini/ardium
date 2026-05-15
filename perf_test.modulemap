@@ -1,0 +1,4 @@
+module perf_test {
+  header "perf_test.h"
+  export *
+}

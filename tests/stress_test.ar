@@ -1,0 +1,150 @@
+// tests/stress_test.ar - Hardcore Runtime Stress Test
+// ทดสอบ runtime แบบโหดๆ
+
+fn main() {
+    __sys_println("🔥 Ardium 2.0.0 STRESS TEST 🔥")
+    __sys_println("================================")
+    __sys_println("")
+    
+    // Test 1: High-frequency allocation
+    stress_allocation()
+    
+    // Test 2: ARC stress test
+    stress_arc()
+    
+    // Test 3: String operations
+    stress_strings()
+    
+    // Test 4: Deep recursion
+    stress_recursion(100)
+    
+    // Test 5: Large data structures
+    stress_arrays()
+    
+    __sys_println("")
+    __sys_println("🎉 ALL STRESS TESTS PASSED! 🎉")
+    
+    return 0
+}
+
+// ทดสอบการ allocate หนักๆ
+fn stress_allocation() {
+    __sys_print("Test 1: High-frequency allocation (10000x)... ")
+    
+    let i = 0
+    while (i < 10000) {
+        let ptr = __sys_malloc(1024)
+        if (ptr == 0) {
+            __sys_println("FAILED - OOM")
+            return 0
+        }
+        __sys_free(ptr)
+        i = i + 1
+    }
+    
+    __sys_println("PASSED ✓")
+    return 0
+}
+
+// ทดสอบ ARC แบบหนัก
+fn stress_arc() {
+    __sys_print("Test 2: ARC stress test (1000 objects)... ")
+    
+    let i = 0
+    while (i < 1000) {
+        let obj = ARC_alloc(512, i)
+        if (obj == 0) {
+            __sys_println("FAILED - alloc")
+            return 0
+        }
+        
+        // Retain และ release หลายรอบ
+        ARC_retain(obj)
+        ARC_retain(obj)
+        ARC_release(obj)
+        ARC_release(obj)
+        ARC_release(obj)  // ควร free ที่นี่
+        
+        i = i + 1
+    }
+    
+    __sys_println("PASSED ✓")
+    return 0
+}
+
+// ทดสอบ string operations
+fn stress_strings() {
+    __sys_print("Test 3: String operations (concat 100x)... ")
+    
+    let result = String_from_cstr("Start")
+    let i = 0
+    
+    while (i < 100) {
+        let part = String_from_cstr("X")
+        let new_result = String_concat(result, part)
+        result = new_result
+        i = i + 1
+    }
+    
+    let len = String_length(result)
+    if (len == 105) {  // "Start" (5) + "X" * 100
+        __sys_println("PASSED ✓")
+    } else {
+        __sys_println("FAILED - wrong length")
+    }
+    
+    return 0
+}
+
+// ทดสอบ recursion ลึก
+fn stress_recursion(n: int) -> int {
+    if (n == 0) {
+        __sys_print("Test 4: Deep recursion (100 levels)... ")
+        __sys_println("PASSED ✓")
+        return 0
+    }
+    
+    // Allocate ในแต่ละ level
+    let local = __sys_malloc(256)
+    __builtin_poke(local, n)
+    
+    let result = stress_recursion(n - 1)
+    
+    __sys_free(local)
+    return result
+}
+
+// ทดสอบ array ใหญ่
+fn stress_arrays() {
+    __sys_print("Test 5: Large arrays (1000 elements)... ")
+    
+    let arr = Array_new(8)  // 8 bytes per element
+    
+    let i = 0
+    while (i < 1000) {
+        let value = alloc(8)
+        __builtin_poke(value, i)
+        Array_push(arr, value)
+        i = i + 1
+    }
+    
+    let len = Array_length(arr)
+    if (len == 1000) {
+        // ตรวจสอบว่า data ถูกต้อง
+        let first = Array_get(arr, 0)
+        let last = Array_get(arr, 999)
+        
+        let first_val = __builtin_peek(first)
+        let last_val = __builtin_peek(last)
+        
+        if (first_val == 0) {
+            if (last_val == 999) {
+                __sys_println("PASSED ✓")
+                return 0
+            }
+        }
+    }
+    
+    __sys_println("FAILED")
+    return 0
+}

@@ -1,0 +1,81 @@
+# Build Artifacts
+_build/
+build/
+dist/
+cmake-build-*/
+.cache/
+
+# Binaries & Libraries
+*.o
+*.obj
+*.a
+*.lib
+*.dylib
+*.so
+*.dll
+*.exe
+a.out
+
+# LLVM & Assembly
+*.bc
+*.ll
+*.s
+
+# Project Executables (Built)
+arc
+TitanScript
+TestCompiler
+TestGraphics
+TestReactive
+TitanTest
+bench
+bench_fast
+bench_int
+
+# Packaging & Installers
+*.pkg
+*.dmg
+*.tar.gz
+*.zip
+dist_staging/
+full_bundle_staging/
+dmg_staging/
+packaging/root/
+
+# Logs & Temporary Files
+*.log
+*.tmp
+build_out.txt
+output.txt
+crash.log
+build_err.txt
+
+# System Files
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+
+# IDE & Tools
+.vscode/
+.idea/
+.bloop/
+.metals/
+*.swp
+*.swo
+
+# Project specific temp
+apps/GodView
+apps/HybridApp
+apps/SimulationApp
+apps/SPU_Manager
+apps/StudentManager
+my_program
+my_test_app
+myapp.o
+linux/ardium_source/_ardium-2.2_backup/bin/
+linux/ardium_source/_ardium-2.2_backup/
+linux/ardium_source/_ardium-2.2_backup/
+linux/ardium_source/_dist_staging_backup/
+_build/
+installer/

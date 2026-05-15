@@ -1,0 +1,26 @@
+import AppKit
+
+extern fn init_apple_gui();
+extern fn create_apple_window(t,x,y,w,h);
+extern fn run_apple_gui();
+extern fn set_modern_background();
+extern fn add_auto_text(txt, size, bold);
+
+@VClass
+fn MainView() {
+    add_auto_text("Layout System Online", 60, 1);
+    add_auto_text("Vertical Stack Demo", 40, 0);
+    add_auto_text("Automatic Positioning", 24, 0);
+    add_auto_text("No X,Y Coordinates Needed", 20, 0);
+}
+
+fn main() {
+    init_apple_gui();
+    create_apple_window("Layout Engine Test", 200, 200, 900, 600);
+    set_modern_background();
+    
+    MainView();
+    
+    run_apple_gui();
+    return 0;
+}

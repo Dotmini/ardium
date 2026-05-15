@@ -1,0 +1,22 @@
+// stdlib/CoreMath.ar - Standard Math Bindings
+
+extern fn sin(x) -> double
+extern fn cos(x) -> double
+extern fn tan(x) -> double
+extern fn sqrt(x) -> double
+extern fn pow(base, exp) -> double
+extern fn abs(x) -> i32
+extern fn fabs(x) -> double
+extern fn floor(x) -> double
+extern fn ceil(x) -> double
+
+// Constants are usually inlined, but we can define standard helpers
+fn min(a, b) {
+    if (a < b) { return a; }
+    return b;
+}
+
+fn max(a, b) {
+    if (a > b) { return a; }
+    return b;
+}

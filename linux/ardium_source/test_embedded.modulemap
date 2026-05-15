@@ -1,0 +1,4 @@
+module test_embedded {
+  header "test_embedded.h"
+  export *
+}

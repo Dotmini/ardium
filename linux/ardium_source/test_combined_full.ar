@@ -1,0 +1,10 @@
+class Header {
+    ID: i32,
+    Size: i64
+}
+fn main() {
+    GLOBAL(65536) as Header;
+    GLOBAL.ID = 777;
+    println(GLOBAL.ID);
+    return 0;
+}

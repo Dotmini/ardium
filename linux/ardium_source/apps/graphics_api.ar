@@ -1,0 +1,17 @@
+// --- Ardium Graphics API ---
+// Wrapper for the standalone Metal Engine
+
+extern fn core_metal_init();
+extern fn core_metal_alloc_shared(count) -> i64;
+extern fn core_metal_render();
+
+// Helper to initialize the engine
+fn init_graphics() {
+    core_metal_init();
+    return 0;
+}
+
+// Helper to get raw pointer for Zero-Copy physics
+fn allocate_particles(count) {
+    return core_metal_alloc_shared(count);
+}

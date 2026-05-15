@@ -1,0 +1,41 @@
+// 1. กำหนดค่าพื้นฐาน
+let name = "arsenal";
+let age = 18;
+let version = 18.01;
+
+// 2. ประกาศ Global
+GLOBAL(Info) = (name, age, version);
+
+// 3. Class OOP (เชื่อมข้อมูลจาก Global)
+class Main(GLOBAL.Info) {
+    let Data = GLOBAL.Info.name;
+    let Str = GLOBAL.Info.version;
+}
+
+// 4. สร้าง Instance
+Main();
+
+// 5. ระบบดักจับข้อมูล (Interceptor)
+@GLOBAL(Info) {
+    if (Data == "arsenal") {
+        print(Data);
+    } else {
+        ERR("Invalid Data");
+    }
+
+    RESET(); // เคลียร์สถานะ Interceptor
+
+    if (Str == 18.01) {
+        // วนลูปโชว์พลังความเร็ว
+        let mut i = 0;
+        while (i < 100) {
+            print(Str);
+            i = i + 1;
+        }
+    } else {
+        print("WOW OH MY Fuck");
+    }
+}
+
+print(os.name);
+print("I AM ARSENAL From Dotmini and SPU AI CLUB");

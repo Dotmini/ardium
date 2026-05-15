@@ -1,0 +1,1 @@
+let name="a"; let age=18; let v=18.0; GLOBAL(Info)=(name,age,v); class Main(GLOBAL.Info){let D=GLOBAL.Info.name;} Main();

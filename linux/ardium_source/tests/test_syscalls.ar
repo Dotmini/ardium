@@ -1,0 +1,20 @@
+// test_syscalls.ar - Simple test for __sys_* functions
+
+fn main() {
+    // Test malloc and free
+    let ptr = __sys_malloc(1024)
+    __sys_print("Malloc test passed\n")
+    __sys_free(ptr)
+    
+    // Test print
+    __sys_print("Print test passed\n")
+    __sys_println("Println test passed")
+    
+    // Test getpid
+    let pid = __sys_getpid()
+    __sys_print("Getpid test passed\n")
+    
+    __sys_println("All syscall tests passed!")
+    
+    return 0
+}

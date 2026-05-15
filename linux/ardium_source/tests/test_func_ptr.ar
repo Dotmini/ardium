@@ -1,0 +1,17 @@
+fn runner(f) {
+    return f()
+}
+
+fn target() {
+    return 42
+}
+
+fn main() {
+    let res = runner(target)
+    if (res == 42) {
+        __sys_println("Function pointers work!")
+    } else {
+        __sys_println("Failed.")
+    }
+    return 0
+}

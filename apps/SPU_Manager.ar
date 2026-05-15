@@ -1,0 +1,111 @@
+// ╔════════════════════════════════════════════════════════════════╗
+// ║  DOTMINI SOFTWARE CLI                                  v5.0    ║
+// ╠════════════════════════════════════════════════════════════════╣
+// ║  APP     : SPU AI CLUB Manager                                 ║
+// ║  USER    : Tirawat Nantamas                                    ║
+// ║  ROLE    : Founder & Advisor                                   ║
+// ╚════════════════════════════════════════════════════════════════╝
+
+// --- EXTERNS ---
+extern fn coreui_init_metal();
+extern fn metal_create_system(count, w, h) -> i64;
+extern fn coreui_create_metal_window(title, sys_id);
+extern fn coreui_run_loop();
+extern fn titan_ui_create_button(label);
+
+// --- DATA MODELS ---
+
+struct Task {
+    id: i64,
+    title: String,
+    status: i64,
+    priority: f32
+}
+
+struct Project {
+    id: i64,
+    name: String,
+    deadline: String 
+}
+
+// --- LOGIC CONTROLLER ---
+
+fn analyze_priority(task_id) {
+    println("[AI] Analyzing Task Priority in Neural Engine...");
+    
+    spawn {
+        let score = 85; 
+        println("[AI] Task Analysis Complete. Priority Score: High");
+    }
+    return 0;
+}
+
+// --- UI COMPONENTS ---
+
+fn render_sidebar() {
+    VClass {
+        titan_ui_create_button("🚀 SPU AI CLUB") 
+        titan_ui_create_button("📂 Active Projects")
+        titan_ui_create_button("📊 Analytics")
+        titan_ui_create_button("⚙️ Settings")
+    }
+    return 0;
+}
+
+fn render_kanban_card(title) {
+    ZClass {
+        titan_ui_create_button(" [ GLASS BACKDROP ] ")
+        
+        VClass {
+            titan_ui_create_button(title)
+            titan_ui_create_button("Status: Pending")
+        }
+    }
+    return 0;
+}
+
+fn render_content() {
+    HClass {
+        VClass {
+            titan_ui_create_button("📌 TO DO")
+            render_kanban_card("Plan Hackathon 2026")
+            render_kanban_card("Update Ardium Docs")
+        }
+        
+        VClass {
+            titan_ui_create_button("🔥 IN PROGRESS")
+            render_kanban_card("Titan Runtime Optimization")
+        }
+    }
+    return 0;
+}
+
+fn build_dashboard() {
+    HClass {
+        render_sidebar()
+        render_content()
+    }
+    return 0;
+}
+
+// --- MAIN ENTRY POINT ---
+
+fn main() {
+    println("--- [Major] Booting SPU AI CLUB Manager ---");
+
+    coreui_init_metal();
+
+    println("[Ardium] Spawning 50,000 Neural Nodes...");
+    let sys_id = metal_create_system(50000, 1280.0, 720.0);
+
+    coreui_create_metal_window("SPU AI CLUB Manager [Titan v5.0]", sys_id);
+
+    analyze_priority(101);
+
+    build_dashboard();
+
+    println("[Ardium] System Online. Ready for Commander Tirawat.");
+    coreui_run_loop();
+
+    return 0;
+}

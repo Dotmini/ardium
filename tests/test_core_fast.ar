@@ -1,0 +1,34 @@
+// tests/test_core_fast.ar
+import "CoreString"
+import "CoreMath"
+
+fn main() {
+    __sys_println("--- Testing CoreString ---");
+    
+    let s1 = "Hello";
+    let s2 = "World";
+    
+    let len = strlen(s1);
+    if (len == 5) { __sys_println("strlen: OK"); } else { __sys_println("strlen: FAIL"); }
+    
+    let s3 = concat(s1, s2);
+    __sys_println(s3); // HelloWorld
+    
+    let eq = streq(s1, "Hello");
+    if (eq == 1) { __sys_println("streq: OK"); } else { __sys_println("streq: FAIL"); }
+    
+    __sys_println("--- Testing CoreMath ---");
+    
+    let x = abs(0 - 10);
+    if (x == 10) { __sys_println("abs: OK"); } else { __sys_println("abs: FAIL"); }
+    
+    let m = max(10, 20);
+    if (m == 20) { __sys_println("max: OK"); } else { __sys_println("max: FAIL"); }
+    
+    let p = pow(2.0, 3.0);
+    // 8.0?
+    // Using simple check since float printing might be basic
+    if (p > 7.9) { __sys_println("pow: OK"); } else { __sys_println("pow: FAIL"); }
+    
+    return 0;
+}

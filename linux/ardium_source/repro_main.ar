@@ -1,0 +1,7 @@
+import "repro_lib.ar"
+
+fn main() {
+    print("Main Start\n")
+    print(GLOBAL.LibConfig.x)
+    print("\n")
+}

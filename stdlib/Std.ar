@@ -1,0 +1,61 @@
+// --- Ardium Standard Library (Std.ar) ---
+// High-Level Python-like wrappers for the Titan Runtime
+
+// --- LOW-LEVEL BINDINGS ---
+extern fn core_print(s) -> i64;
+extern fn core_file_read(path) -> ptr; // Returns char*
+extern fn core_sin(x) -> double;
+extern fn core_cos(x) -> double;
+extern fn core_random(min, max) -> i64;
+extern fn core_get_time() -> i64;
+extern fn core_sleep(ms) -> i64;
+
+// --- CONSOLE MODULE ---
+class Console {
+    // Logs a message to the standard output
+    fn log(msg) {
+        // In a real implementation, 'msg' might need casting or stringifying
+        core_print(msg);
+        return 0;
+    }
+}
+
+// --- MATH MODULE ---
+class Math {
+    fn sin(x) {
+        return core_sin(x);
+    }
+
+    fn cos(x) {
+        return core_cos(x);
+    }
+
+    fn random(min, max) {
+        return core_random(min, max);
+    }
+}
+
+// --- TIME MODULE ---
+class Time {
+    // Returns current timestamp in milliseconds
+    fn now() {
+        return core_get_time();
+    }
+
+    // Sleep for 'seconds' (float or int)
+    fn sleep(seconds) {
+        let ms = seconds * 1000;
+        core_sleep(ms);
+        return 0;
+    }
+}
+
+// --- FILE SYSTEM MODULE ---
+class File {
+    fn read_text(path) {
+        let ptr = core_file_read(path);
+        // Note: In a full system, we would wrap 'ptr' into a managed String object
+        // For now, we return the raw pointer which the runtime prints as a string
+        return ptr;
+    }
+}

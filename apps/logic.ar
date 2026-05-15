@@ -1,0 +1,12 @@
+// --- Ardium v4.0: Logic Module (Hot Reloadable) ---
+// This file is compiled to 'logic.dylib'
+
+extern fn metal_create_system(count, w, h) -> i64;
+
+// The 'tick' function is called by the runtime loop if configured
+// For v4.0 Metal, the main loop is driven by MTKViewDelegate (C++ side),
+// but we could call into this for game logic.
+fn tick(id) {
+    // Game Logic Here
+    return 0;
+}

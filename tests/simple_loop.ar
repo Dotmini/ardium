@@ -1,0 +1,1 @@
+fn main() { loop { return 0; } }

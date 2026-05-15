@@ -1,0 +1,6 @@
+fn main() {
+    // LLVM placeholders: $0 is the first output
+    let val = asm("mov $0, #42", "=r", 1);
+    println(val);
+    return 0;
+}

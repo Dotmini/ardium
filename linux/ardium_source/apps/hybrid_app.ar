@@ -1,0 +1,51 @@
+// --- Ardium v3.0 Hybrid App ---
+// "Fast as Rust, Easy as Swift"
+
+// 1. ARC Interface (UI)
+extern fn coreui_init_app();
+extern fn coreui_create_window(title, w, h) -> i64;
+extern fn coreui_create_button(label) -> i64;
+extern fn coreui_add_subview(parent, child);
+extern fn coreui_set_frame(id, x, y, w, h);
+extern fn coreui_run_loop();
+
+// 2. Ownership Interface (Data)
+extern fn coreui_own_buffer(size) -> i64;
+extern fn coreui_write_buffer(id, offset, val);
+extern fn coreui_drop_ownership(id);
+
+fn main() {
+    println("--- Starting Ardium v3.0 Hybrid Runtime ---");
+
+    // [Ownership]
+    // Allocate high-performance buffer (C++ unique_ptr)
+    println("[Ardium] Requesting Owned Buffer (1024 bytes)...");
+    let buf_id = coreui_own_buffer(1024);
+    
+    // Simulate data processing
+    coreui_write_buffer(buf_id, 0, 255);
+    coreui_write_buffer(buf_id, 10, 128);
+    println("[Ardium] Data written to Owned Buffer.");
+
+    // [ARC]
+    // Create UI Components (Objective-C ARC)
+    println("[Ardium] Initializing ARC UI...");
+    coreui_init_app();
+
+    let win_id = coreui_create_window("Ardium Hybrid v3.0", 600, 400);
+    let btn_id = coreui_create_button("Click Me (ARC)");
+
+    // Layout
+    coreui_set_frame(btn_id, 250.0, 180.0, 120.0, 40.0);
+    coreui_add_subview(win_id, btn_id);
+
+    println("[Ardium] UI Ready. Entering Event Loop.");
+    
+    // [Ownership]
+    // Manual drop demonstration (In v3.0 scope analysis would do this auto)
+    coreui_drop_ownership(buf_id); 
+
+    coreui_run_loop();
+
+    return 0;
+}

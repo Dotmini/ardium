@@ -1,0 +1,118 @@
+{
+    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+    "name": "Ardium",
+    "scopeName": "source.ardium",
+    "patterns": [
+        {
+            "include": "#comments"
+        },
+        {
+            "include": "#keywords"
+        },
+        {
+            "include": "#strings"
+        },
+        {
+            "include": "#numbers"
+        },
+        {
+            "include": "#functions"
+        },
+        {
+            "include": "#types"
+        },
+        {
+            "include": "#decorators"
+        }
+    ],
+    "repository": {
+        "comments": {
+            "patterns": [
+                {
+                    "name": "comment.line.double-slash.ardium",
+                    "match": "//.*$"
+                },
+                {
+                    "name": "comment.block.ardium",
+                    "begin": "/\\*",
+                    "end": "\\*/"
+                }
+            ]
+        },
+        "keywords": {
+            "patterns": [
+                {
+                    "name": "keyword.control.ardium",
+                    "match": "\\b(if|else|loop|while|for|return|break|continue|match)\\b"
+                },
+                {
+                    "name": "keyword.declaration.ardium",
+                    "match": "\\b(fn|var|let|mut|struct|class|enum|import|extern|async|await)\\b"
+                },
+                {
+                    "name": "keyword.other.ardium",
+                    "match": "\\b(export|test|interrupt|GLOBAL|RESET|ERR)\\b"
+                },
+                {
+                    "name": "constant.language.ardium",
+                    "match": "\\b(true|false|nil|null)\\b"
+                }
+            ]
+        },
+        "strings": {
+            "name": "string.quoted.double.ardium",
+            "begin": "\"",
+            "end": "\"",
+            "patterns": [
+                {
+                    "name": "constant.character.escape.ardium",
+                    "match": "\\\\."
+                }
+            ]
+        },
+        "numbers": {
+            "patterns": [
+                {
+                    "name": "constant.numeric.float.ardium",
+                    "match": "\\b[0-9]+\\.[0-9]+\\b"
+                },
+                {
+                    "name": "constant.numeric.hex.ardium",
+                    "match": "\\b0x[0-9a-fA-F]+\\b"
+                },
+                {
+                    "name": "constant.numeric.integer.ardium",
+                    "match": "\\b[0-9]+\\b"
+                }
+            ]
+        },
+        "functions": {
+            "patterns": [
+                {
+                    "name": "entity.name.function.ardium",
+                    "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\()"
+                }
+            ]
+        },
+        "types": {
+            "patterns": [
+                {
+                    "name": "entity.name.type.ardium",
+                    "match": "\\b(i8|i16|i32|i64|u8|u16|u32|u64|f32|f64|bool|string|void)\\b"
+                },
+                {
+                    "name": "entity.name.type.class.ardium",
+                    "match": "\\b[A-Z][a-zA-Z0-9_]*\\b"
+                }
+            ]
+        },
+        "decorators": {
+            "patterns": [
+                {
+                    "name": "entity.name.function.decorator.ardium",
+                    "match": "@[a-zA-Z_][a-zA-Z0-9_]*"
+                }
+            ]
+        }
+    }
+}

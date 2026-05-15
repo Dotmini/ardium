@@ -1,0 +1,7 @@
+@External("libc") extern fn malloc(size)
+fn main() {
+    if (1) {
+        @owned let ptr = malloc(32);
+    }
+    return 0;
+}

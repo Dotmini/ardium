@@ -1,0 +1,20 @@
+// tests/test_arc_simple.ar
+// Simplify to locate error
+
+fn main() {
+    print("ARC Simple Test\n")
+    test_two_args(1, 2)
+    return 0
+}
+
+fn test_two_args(a, b) {
+    print("Args: ")
+    // We can't print ints easily without __sys_print wrapper that handles ints...
+    // But we just want to check parser
+    if (a == 1) {
+        if (b == 2) {
+            print("OK\n")
+        }
+    }
+    return 0
+}

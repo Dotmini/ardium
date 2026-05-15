@@ -1,0 +1,27 @@
+import fn print(n);
+
+fn main() {
+    let a = 1;
+    let b = 0;
+
+    show("--- Testing Logical OR ---");
+
+    if (a == 1 or b == 1) {
+        show("Test 1 Passed: (1 or 0) is True");
+    } else {
+        show("Test 1 Failed");
+    }
+
+    if (b == 1 or b == 2) {
+        show("Test 2 Failed");
+    } else {
+        show("Test 2 Passed: (0 or 0) is False");
+    }
+
+    show("--- Testing Member Access Syntax ---");
+    // บรรทัดนี้ควรจะทำให้ Compiler พ่น Error "Global member access implementation in progress"
+    // เพื่อยืนยันว่า Codegen วิ่งมาถึงจุดที่เราแทรกไว้
+    let x = GLOBAL.Info;
+
+    return 0;
+}

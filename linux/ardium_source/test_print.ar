@@ -1,0 +1,6 @@
+fn main() {
+    let name = "arsenal"
+    print(name)
+    print("\n")
+    return 0
+}

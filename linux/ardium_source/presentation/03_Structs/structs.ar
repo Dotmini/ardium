@@ -1,0 +1,38 @@
+// Topic: Structs
+// Define Vector2 and Dot Product
+
+extern fn printf(fmt: string, val: int);
+extern fn malloc(size: int) -> Vector2; // Typed extern return
+extern fn free(ptr: Vector2);
+
+struct Vector2 {
+    x: i64,
+    y: i64
+}
+
+fn dot(a, b) {
+    // Member access for local vars uses peek/poke for performance
+    var ax = peek(a + 0);
+    var ay = peek(a + 8);
+    var bx = peek(b + 0);
+    var by = peek(b + 8);
+    return (ax * bx) + (ay * by);
+}
+
+fn main() {
+    // Manual Allocation
+    var v1 = malloc(16); // 2 ints * 8 bytes
+    poke(v1 + 0, 10);
+    poke(v1 + 8, 20);
+
+    var v2 = malloc(16);
+    poke(v2 + 0, 5);
+    poke(v2 + 8, 5);
+
+    var result = dot(v1, v2);
+    printf("Dot Product: %d\n", result);
+
+    // free(v1);
+    // free(v2);
+    return 0;
+}

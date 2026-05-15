@@ -1,0 +1,2 @@
+let G="A";
+GLOBAL(Info)=(G);

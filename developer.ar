@@ -1,0 +1,35 @@
+import Foundation
+import AppKit
+
+extern fn ardium_nslog(s);
+extern fn init_apple_gui();
+extern fn create_apple_window(title, x, y, w, h);
+extern fn run_apple_gui();
+extern fn set_modern_background();
+extern fn add_styled_text(text, x, y, w, h, size, is_bold, align);
+
+fn main() {
+    println("🚀 Launching Dotmini Founder Profile...");
+
+    init_apple_gui();
+
+    create_apple_window("Dotmini Software HQ", 200, 200, 900, 600);
+
+    set_modern_background();   
+ 
+    add_styled_text("ARSENAL", 0, 400, 900, 100, 80, 1, 1);
+    
+    add_styled_text("THE ARDIUM ENGINE", 0, 360, 900, 40, 20, 0, 1);
+
+    add_styled_text("Tirawat Nantamas", 0, 240, 900, 40, 32, 1, 1);
+    
+    add_styled_text("Founder of Dotmini Software", 0, 200, 900, 30, 18, 0, 1);
+
+    add_styled_text("POWERED BY SPU AI CLUB", 0, 50, 900, 30, 14, 1, 1);
+
+    println("✅ UI Loaded. Opening Window...");
+    
+    run_apple_gui();
+
+    return 0;
+}

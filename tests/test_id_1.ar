@@ -1,0 +1,1 @@
+fn main() { beginVStack(20, 1); }

@@ -1,0 +1,18 @@
+let G_NAME = "ARSENAL";
+
+fn interceptor() {
+    println("--- INTERCEPTOR : ACTIVE ---");
+}
+
+@export
+fn main() {
+    println("ARSENAL SYSTEM : ONLINE");
+    println("CLUB : SPU AI CLUB");
+    
+    let m = malloc(8);
+    println("MEM : " + m);
+    
+    if (G_NAME == "ARSENAL") {
+        interceptor();
+    }
+}

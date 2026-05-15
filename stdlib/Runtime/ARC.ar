@@ -1,0 +1,159 @@
+// stdlib/Runtime/ARC.ar
+// Ardium Self-Hosting Runtime: Automatic Reference Counting
+// Pure Ardium implementation (Apple-style ARC + Rust ownership)
+
+import "Runtime/Memory"
+
+// Reference counted object header
+// ┌─────────────┬──────────────┬─────────────┐
+// │ RefCount(8) │ TypeInfo(8)  │ Data...     │
+// └─────────────┴──────────────┴─────────────┘
+
+let ARC_HEADER_SIZE = 16;
+
+// Allocate reference counted object
+fn ARC_alloc(size, type_id) {
+    let total_size = size + ARC_HEADER_SIZE;
+    let header = __sys_malloc(total_size);
+    
+    if (header == 0) {
+        return 0;  // Out of memory
+    }
+    
+    // Initialize header
+    __builtin_poke(header + 0, 1);         // refcount = 1
+    __builtin_poke(header + 8, type_id);  // type_id
+    
+    // Zero out data section
+    __sys_memset(header + ARC_HEADER_SIZE, 0, size);
+    
+    return header + ARC_HEADER_SIZE;  // Return data pointer
+}
+
+// Increment reference count
+fn ARC_retain(ptr) {
+    if (ptr == 0) {
+        return 0;
+    }
+    
+    let header = ptr - ARC_HEADER_SIZE;
+    let count = __builtin_peek(header + 0);
+    __builtin_poke(header + 0, count + 1);
+    
+    return 0;
+}
+
+// Decrement reference count, free if zero
+fn ARC_release(ptr) {
+    if (ptr == 0) {
+        return 0;
+    }
+    
+    let header = ptr - ARC_HEADER_SIZE;
+    let count = __builtin_peek(header + 0);
+    
+    // count <= 1 check not supported directly?
+    if (count < 2) {
+        // Ref count reached zero - free memory
+        __sys_free(header);
+    } else {
+        // Decrement ref count
+        __builtin_poke(header + 0, count - 1);
+    }
+    
+    return 0;
+}
+
+// Get current reference count
+fn ARC_count(ptr) {
+    if (ptr == 0) {
+        return 0;
+    }
+    
+    let header = ptr - ARC_HEADER_SIZE;
+    return __builtin_peek(header + 0);
+}
+
+// Get type ID
+fn ARC_type_id(ptr) {
+    if (ptr == 0) {
+        return 0;
+    }
+    
+    let header = ptr - ARC_HEADER_SIZE;
+    return __builtin_peek(header + 8);
+}
+
+// Smart pointer wrapper (Rc<T>)
+struct Rc { ptr: i64 }
+
+fn Rc_new(size, type_id) {
+    let data_ptr = ARC_alloc(size, type_id);
+    if (data_ptr == 0) {
+        return 0;
+    }
+    
+    let rc = alloc(8);  // sizeof(Rc)
+    __builtin_poke(rc + 0, data_ptr);
+    return rc;
+}
+
+fn Rc_clone(rc) {
+    let ptr = __builtin_peek(rc + 0);
+    ARC_retain(ptr);
+    
+    let new_rc = alloc(8);
+    __builtin_poke(new_rc + 0, ptr);
+    return new_rc;
+}
+
+fn Rc_get(rc) {
+    return __builtin_peek(rc + 0);
+}
+
+fn Rc_drop(rc) {
+    let ptr = __builtin_peek(rc + 0);
+    ARC_release(ptr);
+}
+
+// Weak reference (doesn't keep object alive)
+struct Weak { ptr: i64, valid: i64 }
+
+fn Weak_new(rc) {
+    let ptr = Rc_get(rc);
+    
+    let weak = alloc(16);  // sizeof(Weak)
+    __builtin_poke(weak + 0, ptr);
+    __builtin_poke(weak + 8, 1);  // valid = true
+    return weak;
+}
+
+fn Weak_upgrade(weak) {
+    let ptr = __builtin_peek(weak + 0);
+    let valid = __builtin_peek(weak + 8);
+    
+    if (valid == 0) {
+        return 0;  // Object was deallocated
+    }
+    
+    if (ptr == 0) {
+        return 0;
+    }
+    
+    // Check if still alive (refcount > 0)
+    let count = ARC_count(ptr);
+    if (count > 0) {
+        return Rc_new_from_ptr(ptr);
+    }
+    
+    // Mark as invalid
+    __builtin_poke(weak + 8, 0);
+    return 0;
+}
+
+fn Rc_new_from_ptr(ptr) {
+    ARC_retain(ptr);
+    let rc = alloc(8);
+    __builtin_poke(rc + 0, ptr);
+    return rc;
+}

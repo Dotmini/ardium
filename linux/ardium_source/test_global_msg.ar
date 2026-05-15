@@ -1,0 +1,15 @@
+@GLOBAL(Info) {
+    print("GLOBAL(Info) Handler Triggered!\n");
+}
+
+fn main() {
+    print("Main Start\n");
+    // Trigger the handler by assigning to GLOBAL.Info (index 0)
+    GLOBAL.Info = 10; 
+    
+    // Also try Data (index 1) if implemented, but plan only focused on generic mechanism
+    // GLOBAL.Data = 20;
+    
+    print("Main End\n");
+    return 0;
+}

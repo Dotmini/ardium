@@ -1,0 +1,4 @@
+module test_server {
+  header "test_server.h"
+  export *
+}

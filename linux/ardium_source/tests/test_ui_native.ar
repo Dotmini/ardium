@@ -1,0 +1,76 @@
+fn main() {
+    // --- AppInit ---
+    __sys_init_gui()
+    __sys_create_window("Self Hosted CoreUI", 100, 100, 400, 600)
+    __sys_set_background()
+    
+    // reset_layout() logic
+    __agui_set_cursor_x(50)
+    __agui_set_cursor_y(550)
+    __agui_set_layout_mode(0)
+    
+    // --- VStackStart ---
+    __agui_set_layout_mode(1)
+    
+    // --- Title("Native Layout Engine") ---
+    // Draw Text
+    let tx = __agui_get_cursor_x()
+    let ty = __agui_get_cursor_y()
+    let size = 24
+    __sys_draw_text("Native Layout Engine", tx, ty, size, 1, 1)
+    
+    // advance_cursor(width=400, height=34)
+    // mode is 1 (VStack)
+    __agui_set_cursor_y(ty - 34 - 10)
+    
+    // --- Subtitle("Self-Hosted") ---
+    let tx2 = __agui_get_cursor_x()
+    let ty2 = __agui_get_cursor_y()
+    let size2 = 18
+    __sys_draw_text("Self-Hosted", tx2, ty2, size2, 0, 0)
+    
+    // advance_cursor(400, 28)
+    __agui_set_cursor_y(ty2 - 28 - 10)
+    
+    // --- Spacer(20) ---
+    __agui_set_cursor_y(__agui_get_cursor_y() - 20)
+    
+    // --- HStackStart ---
+    __agui_set_layout_mode(2)
+    
+    // --- Button("Left", 0) ---
+    let btx = __agui_get_cursor_x()
+    let bty = __agui_get_cursor_y()
+    __sys_draw_button("Left", btx, bty, 120, 32, 0)
+    // advance_cursor(120, 42) -> HStack -> x + w + 10
+    __agui_set_cursor_x(btx + 120 + 10)
+    
+    // --- Spacer(10) ---
+    __agui_set_cursor_x(__agui_get_cursor_x() + 10)
+    
+    // --- Button("Right", 0) ---
+    let btx2 = __agui_get_cursor_x()
+    let bty2 = __agui_get_cursor_y()
+    __sys_draw_button("Right", btx2, bty2, 120, 32, 0)
+    __agui_set_cursor_x(btx2 + 120 + 10)
+    
+    // --- HStackEnd ---
+    __agui_set_layout_mode(1) // Restore VStack
+    
+    // --- Spacer(20) ---
+    __agui_set_cursor_y(__agui_get_cursor_y() - 20)
+    
+    // --- Text("Pure Logic") ---
+    let tx3 = __agui_get_cursor_x()
+    let ty3 = __agui_get_cursor_y()
+    __sys_draw_text("Pure Logic", tx3, ty3, 14, 0, 0)
+    __agui_set_cursor_y(ty3 - 24 - 10)
+    
+    // --- VStackEnd ---
+    __agui_set_layout_mode(0)
+    
+    // --- AppRun ---
+    __sys_run_gui()
+    
+    return 0
+}

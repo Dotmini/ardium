@@ -1,0 +1,9 @@
+class Header {
+    ID: i32
+}
+
+fn main() {
+    let addr = 65536;
+    GLOBAL(addr) as Header;
+    return 0;
+}

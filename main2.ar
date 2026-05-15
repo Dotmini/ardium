@@ -1,0 +1,35 @@
+import "Core"
+
+fn main() {
+    // String and Int, Float variables
+    let name = "arsenal"
+    let age = 18
+    let version = 18
+    
+    // Print basic info
+    println("Name: arsenal")
+    println("Age: 18") 
+    println("Version: 18")
+    
+    // Conditional logic - using simple boolean check
+    let is_arsenal = 1
+    if (is_arsenal == 1) {
+        println("Data matched!")
+    } else {
+        println("No match found")
+    }
+    
+    // Simple loop example
+    let counter = 0
+    while (counter < 5) {
+        println("Hello from loop iteration")
+        counter = counter + 1
+    }
+    
+    // Final messages
+    println("System: macOS")
+    println("I AM ARSENAL From Dotmini and SPU AI CLUB")
+    
+    return 0
+}
+        

@@ -1,0 +1,30 @@
+#!/bin/bash
+# Ardium 2.2 Post-Installation Script
+
+INSTALL_DIR="/usr/local/ardium"
+BIN_LINK="/usr/local/bin/arc"
+
+echo "Setting up Ardium 2.2..."
+
+# Create wrapper script that points to the correct location
+cat > "$BIN_LINK" << 'EOF'
+#!/bin/bash
+# Ardium Compiler Wrapper
+ARDIUM_ROOT="/usr/local/ardium"
+export DYLD_LIBRARY_PATH="$ARDIUM_ROOT/lib:$DYLD_LIBRARY_PATH"
+export ARDIUM_LIB_PATH="$ARDIUM_ROOT/lib"
+export ARDIUM_STDLIB="$ARDIUM_ROOT/stdlib"
+exec "$ARDIUM_ROOT/bin/arc" "$@"
+EOF
+
+chmod +x "$BIN_LINK"
+echo "Created wrapper: $BIN_LINK"
+
+# Set proper permissions
+chmod -R 755 "$INSTALL_DIR/bin"
+chmod 644 "$INSTALL_DIR/lib/libardium.dylib"
+
+echo "Ardium 2.2 installation complete!"
+echo "Run 'arc --version' to verify installation"
+
+exit 0

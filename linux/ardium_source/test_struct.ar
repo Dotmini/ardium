@@ -1,0 +1,19 @@
+extern fn malloc(size);
+
+class Header {
+    ID: i32,
+    Size: i64
+}
+
+fn main() {
+    let addr = malloc(16);
+    GLOBAL(addr) as Header;
+    
+    GLOBAL.ID = 777;
+    GLOBAL.Size = 888;
+    
+    println(GLOBAL.ID);
+    println(GLOBAL.Size);
+    
+    return 0;
+}

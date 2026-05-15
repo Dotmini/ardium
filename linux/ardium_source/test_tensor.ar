@@ -1,0 +1,19 @@
+fn main() {
+    let N = 512
+    print("Allocating Tensors for 512x512 matrix multiplication...\n")
+    
+    // Allocate contiguous memory (doubles)
+    let A = Tensor(N * N)
+    let B = Tensor(N * N)
+    let C = Tensor(N * N)
+    
+    // Initialize matrices (simple loop)
+    // Note: In real app, we'd use 'poke' or specialized initializer
+    // but here we just leave them zero or assumed valid memory for benchmark
+    
+    print("Computing Matrix Multiplication (Accelerate BLAS)...\n")
+    matmul(A, B, C, N)
+    
+    print("Done. Calculated 512x512 = 262,144 elements.\n")
+    return 0
+}

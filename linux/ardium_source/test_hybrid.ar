@@ -1,0 +1,25 @@
+import "math.ar"
+import Foundation
+
+extern fn printf(fmt, ...);
+
+fn main() {
+    let a = 10;
+    let b = 20;
+    let sum = add(a, b);
+    let prod = multiply(a, b);
+    
+    printf("Sum from math.ar: %d\n", sum);
+    printf("Prod from math.ar: %d\n", prod);
+    
+    // Testing resolve_symbol
+    // On Mac, NULL (empty string in our case if handled) or RTLD_DEFAULT works.
+    let printf_ptr = resolve_symbol("/usr/lib/libSystem.B.dylib", "printf");
+    if (printf_ptr != 0) {
+        printf("✅ resolve_symbol: printf found at %lld\n", printf_ptr);
+    } else {
+        printf("❌ resolve_symbol: printf NOT found\n");
+    }
+    
+    return 0;
+}

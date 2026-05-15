@@ -1,0 +1,7 @@
+extern fn printf(fmt: string, val: int);
+extern fn malloc(size: int) -> int;
+extern fn free(ptr: int);
+extern fn poke(addr: int, val: int);
+extern fn peek(addr: int) -> int;
+
+fn main() {}

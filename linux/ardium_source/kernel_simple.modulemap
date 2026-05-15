@@ -1,0 +1,4 @@
+module kernel_simple {
+  header "kernel_simple.h"
+  export *
+}

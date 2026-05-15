@@ -1,0 +1,4 @@
+module test_error_codegen {
+  header "test_error_codegen.h"
+  export *
+}

@@ -1,0 +1,8 @@
+import "CoreMath"
+
+fn main() {
+    println("Math check");
+    let x = sqrt(100.0);
+    println(x);
+    return 0;
+}

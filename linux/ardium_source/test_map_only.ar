@@ -1,0 +1,3 @@
+fn main() {
+    GLOBAL(65536) as Header;
+}

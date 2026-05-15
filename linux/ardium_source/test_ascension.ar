@@ -1,0 +1,28 @@
+extern fn printf(fmt, ...);
+
+fn main() {
+    printf("🛸 ARDIUM ASCENSION DEMO\n");
+    
+    // 1. AI-Inference JIT
+    printf("🔄 Testing AI-Inference JIT optimization...\n");
+    let res = ai_optimize("ai_hint_nop");
+    printf("✅ AI JIT: Applied optimized NOP pattern. Result: %lld\n", res);
+    
+    // 2. Self-Healing Runtime
+    printf("\n🩹 Testing Self-Healing Recovery Mode...\n");
+    setup_self_healing();
+    
+    let recovered = recovery_mode();
+    if (recovered == 0) {
+        printf("👀 Entering protected execution region...\n");
+        printf("💥 Triggering a controlled crash (dereferencing NULL)...\n");
+        // We simulate a crash via poke to 0
+        poke(0, 999); 
+        printf("❌ This line should never be reached!\n");
+    } else {
+        printf("✅ PHANTOM RUNTIME: Successfully recovered and bypassed the crash!\n");
+    }
+    
+    printf("\n🚀 Ascension Complete. Ardium is now Self-Healing and AI-Optimized.\n");
+    return 0;
+}

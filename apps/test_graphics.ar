@@ -1,0 +1,45 @@
+// --- Ardium Graphics Test ---
+// Testing the standalone Metal Library
+
+// API Imports
+extern fn core_metal_init();
+extern fn core_metal_alloc_shared(count) -> i64;
+extern fn core_metal_render();
+
+// Particle Layout (Must match C++ struct)
+struct Particle {
+    x: f32,
+    y: f32,
+    vx: f32,
+    vy: f32,
+    r: f32,
+    g: f32,
+    b: f32,
+    a: f32
+}
+
+fn main() {
+    println("--- Testing Ardium Graphics ---");
+    
+    core_metal_init();
+    println("[Test] Engine Initialized");
+    
+    let count = 1000;
+    let ptr = core_metal_alloc_shared(count);
+    println("[Test] Buffer Allocated");
+    
+    // Map ptr to struct array logic (Global mapping)
+    // We'll just write to first particle for test
+    GLOBAL(ptr) as Particle;
+    GLOBAL.x = 512.0;
+    GLOBAL.y = 384.0;
+    GLOBAL.r = 1.0;
+    GLOBAL.a = 1.0;
+    
+    println("[Test] Particle 0 Configured: Red Dot at Center");
+    
+    core_metal_render();
+    println("[Test] Render Command Sent");
+    
+    return 0;
+}

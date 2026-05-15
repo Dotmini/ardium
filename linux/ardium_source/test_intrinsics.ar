@@ -1,0 +1,23 @@
+fn main() {
+    let src = malloc(32);
+    let dest = malloc(32);
+    
+    // Fill src with data
+    poke(src, 123);
+    poke(src + 4, 456);
+    
+    // Copy using LLVM intrinsic
+    memcpy(dest, src, 32);
+    
+    println(peek(dest));     // 123
+    println(peek(dest + 4)); // 456
+    
+    // Clear using LLVM intrinsic
+    memset(dest, 0, 32);
+    println(peek(dest));     // 0
+    
+    let cycles = readcyclecounter();
+    println(cycles);
+    
+    return 0;
+}

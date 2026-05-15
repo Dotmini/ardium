@@ -1,0 +1,6 @@
+let x = 42;
+println("Hello from Titan VM");
+VStack {
+    Button("Start Simulation")
+    Button("Stop")
+}

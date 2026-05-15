@@ -1,0 +1,24 @@
+(lldb) target create "./StudentManager"
+Current executable set to '/Users/dotmini/Documents/ardium/StudentManager' (arm64).
+(lldb) run
+Process 80979 launched: '/Users/dotmini/Documents/ardium/StudentManager' (arm64)
+Process 80979 stopped
+* thread #1, queue = 'com.apple.main-thread', stop reason = EXC_BREAKPOINT (code=1, subcode=0x1825b8c94)
+    frame #0: 0x00000001825b8c94 libdispatch.dylib`__DISPATCH_WAIT_FOR_QUEUE__ + 484
+libdispatch.dylib`__DISPATCH_WAIT_FOR_QUEUE__:
+->  0x1825b8c94 <+484>: brk    #0x1
+
+libdispatch.dylib`_dispatch_sync_complete_recurse:
+    0x1825b8c98 <+0>:   pacibsp 
+    0x1825b8c9c <+4>:   stp    x20, x19, [sp, #-0x20]!
+    0x1825b8ca0 <+8>:   stp    x29, x30, [sp, #0x10]
+Target 0: (StudentManager) stopped.
+(lldb) bt
+* thread #1, queue = 'com.apple.main-thread', stop reason = EXC_BREAKPOINT (code=1, subcode=0x1825b8c94)
+  * frame #0: 0x00000001825b8c94 libdispatch.dylib`__DISPATCH_WAIT_FOR_QUEUE__ + 484
+    frame #1: 0x00000001825b87d8 libdispatch.dylib`_dispatch_sync_f_slow + 148
+    frame #2: 0x00000001000211dc libardium.dylib`__sys_create_window + 160
+    frame #3: 0x0000000100000738 StudentManager`createWindow + 36
+    frame #4: 0x00000001000008c8 StudentManager`main + 28
+    frame #5: 0x000000018239dd54 dyld`start + 7184
+(lldb) quit

@@ -1,0 +1,4 @@
+extern fn a(t);
+extern fn b(l);
+extern fn c(x);
+fn main() { a("1"); b("2"); c("3"); return 0; }

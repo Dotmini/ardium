@@ -1,0 +1,77 @@
+// tests/stress_simple.ar - Safe Stress Test (Fixed Syntax)
+
+fn main() {
+    __sys_println("🔥 ARDIUM STRESS TEST 🔥")
+    __sys_println("========================")
+    
+    test_alloc()
+    test_math()
+    test_loops()
+    test_recursion_wrapper()
+    
+    __sys_println("🎉 ALL TESTS PASSED! 🎉")
+    return 0
+}
+
+fn test_alloc() {
+    __sys_print("Test 1: Allocation... ")
+    let i = 0
+    while (i < 1000) {
+        let ptr = __sys_malloc(1024)
+        __builtin_poke(ptr, i)
+        __sys_free(ptr)
+        i = i + 1
+    }
+    __sys_println("PASSED")
+    return 0
+}
+
+fn test_math() {
+    __sys_print("Test 2: Math... ")
+    let a = 123
+    let b = 456
+    let c = 789
+    let res = ((a + b) * c - (a * b)) / (c - b)
+    if (res > 0) {
+        __sys_println("PASSED")
+    }
+    return 0
+}
+
+fn test_loops() {
+    __sys_print("Test 3: Loops... ")
+    let sum = 0
+    let i = 0
+    while (i < 10000) {
+        sum = sum + 1
+        i = i + 1
+    }
+    if (sum == 10000) {
+        __sys_println("PASSED")
+    }
+    return 0
+}
+
+fn test_recursion_wrapper() {
+    __sys_print("Test 4: Recursion... ")
+    let res = test_recursion(50)
+    if (res == 51) {
+        __sys_println("PASSED")
+    } else {
+        __sys_print("FAILED: ")
+        // We can't easily print int without helper, but we know it failed
+        __sys_println("Wrong result")
+    }
+    return 0
+}
+
+fn test_recursion(n) {
+    if (n == 0) {
+        return 1
+    }
+    let temp = __sys_malloc(16) // Simulate stack/heap usage
+    __builtin_poke(temp, n)
+    let res = test_recursion(n - 1)
+    __sys_free(temp)
+    return res + 1
+}

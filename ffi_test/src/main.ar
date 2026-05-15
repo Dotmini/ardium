@@ -1,0 +1,2 @@
+extern fn zlibVersion(); fn main() { printf("ZLib Version: %s
+", zlibVersion()); return 0; }

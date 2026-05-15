@@ -1,0 +1,95 @@
+// stdlib/Runtime/Ownership.ar
+// Ardium Self-Hosting Runtime: Ownership Semantics
+// Rust-style compile-time ownership tracking
+
+// Ownership types (for documentation and future compiler integration)
+// let OWNED = 1      // Value is owned
+// let BORROWED = 2   // Read-only borrow (&)
+// let MUT_BORROWED = 3  // Mutable borrow (&mut)
+
+// Example ownership-aware functions:
+
+// Takes ownership of object
+fn take_ownership(obj: int) {
+    // obj is consumed here
+    // Caller can no longer use obj
+    ARC_release(obj)
+}
+
+// Borrows object (read-only)
+fn borrow_readonly(obj: int) {
+    // Can read from obj
+    // Caller still owns obj
+    let data = __builtin_peek(obj)
+    // No ARC_retain/release needed
+}
+
+// Borrows object (mutable)
+fn borrow_mutable(obj: int) {
+    // Can modify obj
+    // Caller still owns obj
+    // Exclusive access during this function
+    __builtin_poke(obj, 42)
+}
+
+// Returns owned object (transfers ownership)
+fn create_and_return() -> int {
+    let obj = ARC_alloc(1024, 0)
+    // Ownership transferred to caller
+    return obj
+}
+
+// Scope-based RAII (Resource Acquisition Is Initialization)
+fn scope_guard(obj: int) {
+    // Automatically release at end of scope
+    // (Compiler will insert ARC_release)
+}
+
+// Move semantics example
+fn move_example() {
+    let obj = ARC_alloc(1024, 0)   // obj owns memory
+    take_ownership(obj)             // Ownership moved
+    // obj is no longer valid here - compiler error if used
+}
+
+// Borrow example
+fn borrow_example() {
+    let obj = ARC_alloc(1024, 0)   // obj owns memory
+    borrow_readonly(obj)            // Borrow (no move)
+    borrow_mutable(obj)             // Mutable borrow
+    // obj is still valid here
+    ARC_release(obj)                // Explicit release
+}
+
+// Automatic cleanup with Rc<T>
+fn rc_example() {
+    let obj1 = Rc_new(1024, 0)     // Refcount = 1
+    let obj2 = Rc_clone(obj1)      // Refcount = 2
+    
+    Rc_drop(obj1)                   // Refcount = 1
+    // obj2 still valid
+    Rc_drop(obj2)                   // Refcount = 0, freed
+}
+
+// Weak reference to break cycles
+fn weak_example() {
+    let obj = Rc_new(1024, 0)
+    let weak = Weak_new(obj)       // Weak reference
+    
+    Rc_drop(obj)                    // Object freed
+    
+    let upgraded = Weak_upgrade(weak)  // Returns null
+    if (upgraded == 0) {
+        __sys_println("Object was freed")
+    }
+}
+
+// Usage guidelines:
+//
+// 1. Use ARC_alloc for manually managed refs
+// 2. Use Rc<T> for automatic reference counting
+// 3. Use Weak<T> to break reference cycles
+// 4. Compiler will enforce:
+//    - No use after move
+//    - No use after free
+//    - Exclusive mutable access

@@ -1,0 +1,5 @@
+extern fn sqrt(x);
+fn main() {
+  let s = sqrt(16.0);
+  return 0;
+}

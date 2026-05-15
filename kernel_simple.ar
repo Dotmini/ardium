@@ -1,0 +1,9 @@
+@interrupt
+fn timer_handler() {
+    // Handling interrupt without I/O ports for now to verify CC and Object emission
+    return 0;
+}
+
+fn kernel_main() {
+    let x = 10;
+}

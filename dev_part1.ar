@@ -1,0 +1,22 @@
+fn test_basic_types() {
+    println("=== TEST 1: Basic Types ===");
+    let int_zero = 0;
+    let int_positive = 42;
+    let int_negative = -10;
+    let int_hex = 0xFF;
+    print("Int Zero: "); println(int_zero);
+    print("Int Positive: "); println(int_positive);
+    print("Int Hex: "); println(int_hex);
+    
+    let float_zero = 0.0;
+    let float_pi = 3.14159;
+    print("Float Pi: "); println(float_pi);
+    
+    let str_hello = "Hello, Ardium!";
+    print("String: "); println(str_hello);
+    println("Basic types test passed");
+}
+
+fn main() {
+    test_basic_types();
+}

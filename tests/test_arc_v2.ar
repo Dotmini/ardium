@@ -1,0 +1,27 @@
+fn main() {
+    __sys_print("ARC Test v2\n")
+    let ptr = test_alloc(100)
+    if (ptr != 0) {
+        test_release(ptr)
+        __sys_print("ARC Logic OK\n")
+    }
+    return 0
+}
+
+fn test_alloc(size: int) -> int {
+    let header = __sys_malloc(size + 16)
+    if (header == 0) {
+        return 0
+    }
+    __builtin_poke(header, 1)
+    return header + 16
+}
+
+fn test_release(ptr: int) {
+    let header = ptr - 16
+    let count = __builtin_peek(header)
+    if (count <= 1) {
+        __sys_free(header)
+    }
+    return 0
+}

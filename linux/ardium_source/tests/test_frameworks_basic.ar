@@ -1,0 +1,16 @@
+// tests/test_frameworks_basic.ar
+
+import "Core"
+
+fn main() {
+    println("🚀 Ardium 2.0.0 Core Framework Test")
+    println("====================================")
+    
+    print("Testing print: ")
+    println("✓ Works!")
+    
+    println("")
+    println("🎉 Core framework operational!")
+    
+    return 0
+}

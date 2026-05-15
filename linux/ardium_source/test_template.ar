@@ -1,0 +1,34 @@
+// Code Template Verification
+let name = "TestApp";
+let age = 1;
+let version = 1.0;
+
+// Initialize Global Data (Template Data)
+GLOBAL(Info) = (name, age, version);
+
+// Template Class
+class Main(GLOBAL.Info) {
+    print("Template Start\n");
+    print("Name: ");
+    print(GLOBAL.Info.name); // Should be "TestApp"
+    print("\n");
+    
+    // Check Age (field 1)
+    if (GLOBAL.Info.age == 1) {
+        print("Age Verified: 1\n");
+    }
+    
+    // Check Version (field 2)
+    // float comparison
+    if (GLOBAL.Info.version == 1.0) {
+        print("Version Verified: 1.0\n");
+    }
+    
+    print("Template End\n");
+}
+
+fn main() {
+    print("Running Template Test...\n");
+    Main();
+    return 0;
+}

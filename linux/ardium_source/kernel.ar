@@ -1,0 +1,13 @@
+@interrupt
+fn keyboard_handler() {
+    // Read status from port 0x64
+    let status = ioport_in(0x64);
+    // If status OK, read data from 0x60
+    ioport_out(0x20, 0x20); // EOI to PIC
+}
+
+fn kernel_main() {
+    // Direct I/O test
+    ioport_out(0x3F8, 65); // Output 'A' to serial port
+    let val = ioport_in(0x60); // Read keyboard scancode
+}

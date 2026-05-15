@@ -1,0 +1,4 @@
+module test_hybrid {
+  header "test_hybrid.h"
+  export *
+}

@@ -1,0 +1,53 @@
+// test_runtime.ar - Test self-hosting runtime syscalls
+
+fn main() {
+    // Test malloc
+    let ptr = __sys_malloc(1024)
+    print("Allocated: ")
+    print_int(ptr)
+    print("\n")
+    
+    // Test print
+    __sys_print("Hello from syscall!\n")
+    
+    // Test getpid
+    let pid = __sys_getpid()
+    print("PID: ")
+    print_int(pid)
+    print("\n")
+    
+    // Test free
+    __sys_free(ptr)
+    
+    print("Runtime syscalls work!\n")
+    return 0
+}
+
+fn print_int(n: int) {
+    if (n == 0) {
+        print("0")
+        return 0
+    }
+    
+    if (n < 0) {
+        print("-")
+        n = 0 - n
+    }
+    
+    print_int_helper(n)
+    return 0
+}
+
+fn print_int_helper(n: int) {
+    if (n == 0) {
+        return 0
+    }
+    
+    print_int_helper(n / 10)
+    
+    let digit = n - (n / 10 * 10)
+    let c = digit + 48
+    
+    // Would need proper char printing here
+    return 0
+}

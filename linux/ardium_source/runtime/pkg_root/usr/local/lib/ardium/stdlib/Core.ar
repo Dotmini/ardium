@@ -1,0 +1,9 @@
+// stdlib/Core.ar - Ardium Core Framework (Minimal)
+
+fn print(msg) {
+    __builtin_print(msg)
+}
+
+fn println(msg) {
+    __builtin_println(msg)
+}

@@ -1,0 +1,10 @@
+fn main() {
+    GLOBAL.Info = 123;
+    let addr = GLOBAL.Info.Address;
+    // println(addr); // This might be too large/unstable for a fixed comparison, but let's see.
+    let val = peek(addr);
+    println(val);
+    poke(addr, 456);
+    println(GLOBAL.Info);
+    return 0;
+}

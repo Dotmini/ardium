@@ -1,0 +1,42 @@
+{
+    "name": "ardium",
+    "displayName": "Ardium Language",
+    "description": "Language support for Ardium - a modern systems programming language",
+    "version": "1.0.0",
+    "publisher": "dotmini",
+    "engines": {
+        "vscode": "^1.75.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "activationEvents": [
+        "onLanguage:ardium"
+    ],
+    "main": "./extension.js",
+    "contributes": {
+        "languages": [
+            {
+                "id": "ardium",
+                "aliases": [
+                    "Ardium",
+                    "ardium"
+                ],
+                "extensions": [
+                    ".ar"
+                ],
+                "configuration": "./language-configuration.json"
+            }
+        ],
+        "grammars": [
+            {
+                "language": "ardium",
+                "scopeName": "source.ardium",
+                "path": "./syntaxes/ardium.tmLanguage.json"
+            }
+        ]
+    },
+    "dependencies": {
+        "vscode-languageclient": "^8.1.0"
+    }
+}

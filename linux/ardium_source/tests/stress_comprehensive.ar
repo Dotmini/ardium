@@ -1,0 +1,212 @@
+// tests/stress_comprehensive.ar - Detailed Runtime Stress Test
+// Covers: Allocator, Recursion, Pointers, Bits, Structs (simulated)
+
+fn main() {
+    __sys_println("\n💀 COMPREHENSIVE RUNTIME STRESS TEST 💀")
+    __sys_println("=======================================")
+    // Force Rebuild
+    
+    // 1. Matrix Multiplication Simulation
+    stress_matrix_mul()
+    
+    // 2. Linked List (Simulated Structs)
+    stress_linked_list()
+    
+    // 3. Binary Tree (Recursion + Pointers)
+    stress_binary_tree()
+    
+    // 4. Bitwise Operations / Hashing Logic
+    stress_hashing()
+    
+    __sys_println("\n✅ ALL COMPREHENSIVE TESTS PASSED")
+    return 0
+}
+
+// --- Matrix Multiplication (10x10) ---
+fn stress_matrix_mul() {
+    __sys_print("Test 1: Matrix Mul (10x10)... ")
+    
+    let size = 10
+    let a = matrix_create(size)
+    let b = matrix_create(size)
+    let c = __sys_malloc(size * size * 8)
+    
+    if (a == 0) { __sys_println("Msg: Alloc A failed"); return 0; }
+    if (b == 0) { __sys_println("Msg: Alloc B failed"); return 0; }
+    if (c == 0) { __sys_println("Msg: Alloc C failed"); return 0; }
+    
+    // Init operands
+    matrix_fill(a, size, 2)
+    matrix_fill(b, size, 3)
+    
+    // Multiply: C = A * B
+    let i = 0
+    while (i < size) {
+        __sys_print("Row: ");
+        // can't print i
+        __sys_println("."); 
+        let j = 0
+        while (j < size) {
+            let sum = 0
+            let k = 0
+            while (k < size) {
+                let val_a = matrix_get(a, size, i, k)
+                let val_b = matrix_get(b, size, k, j)
+                sum = sum + (val_a * val_b)
+                k = k + 1
+            }
+            matrix_set(c, size, i, j, sum)
+            j = j + 1
+        }
+        i = i + 1
+    }
+    
+    // Check corner value: 
+    // Row 0 of A is all 2s. Col 0 of B is all 3s.
+    // Dot product = sum(2*3 for k in 0..9) = 6 * 10 = 60
+    let check = matrix_get(c, size, 0, 0)
+    
+    __sys_free(a)
+    __sys_free(b)
+    __sys_free(c)
+    
+    if (check == 60) {
+        __sys_println("PASSED")
+    } else {
+        __sys_print("FAILED: ")
+    }
+    return 0
+}
+
+fn matrix_create(size) {
+    let ptr = __sys_malloc(size * size * 8)
+    return ptr
+}
+
+fn matrix_fill(m, size, value) {
+    let count = size * size
+    let i = 0
+    while (i < count) {
+        let offset = i * 8
+        let addr = m + offset
+        __builtin_poke(addr, value)
+        i = i + 1
+    }
+    return 0
+}
+
+fn matrix_get(m, size, r, c) {
+    let index = (r * size) + c
+    let offset = index * 8
+    let addr = m + offset
+    // __builtin_print_int(addr)
+    return __builtin_peek(addr)
+}
+
+fn matrix_set(m, size, r, c, val) {
+    let index = (r * size) + c
+    __builtin_poke(m + (index * 8), val)
+    return 0
+}
+
+// --- Linked List Operations ---
+fn stress_linked_list() {
+    __sys_print("Test 2: Linked List (1000 nodes)... ")
+    
+    // Node layout: [next_ptr, value]
+    let head = 0
+    
+    // Append 1000 nodes
+    let i = 0
+    while (i < 1000) {
+        let node = __sys_malloc(16)
+        __builtin_poke(node, head)      // next = current head
+        __builtin_poke(node + 8, i)     // value = i
+        head = node
+        i = i + 1
+    }
+    
+    // Traverse and verify sum
+    // Sum 0..999 = n*(n-1)/2 = 1000*999/2 = 499500
+    let sum = 0
+    let curr = head
+    while (curr != 0) {
+        let val = __builtin_peek(curr + 8)
+        sum = sum + val
+        
+        let next = __builtin_peek(curr)
+        __sys_free(curr) // Free as we go
+        curr = next
+    }
+    
+    if (sum == 499500) {
+        __sys_println("PASSED")
+    } else {
+        __sys_println("FAILED")
+    }
+    return 0
+}
+
+// --- Binary Tree Recursion ---
+fn stress_binary_tree() {
+    __sys_print("Test 3: Binary Tree Depth (12)... ")
+    // We just verify recursion doesn't crash and returns correct depth count
+    let nodes = tree_build(12) 
+    
+    if (nodes == 4095) { // 2^12 - 1
+        __sys_println("PASSED")
+    } else {
+        __sys_println("FAILED")
+    }
+    return 0
+}
+
+fn tree_build(depth) {
+    if (depth == 0) {
+        return 0
+    }
+    // Simulate node allocation overhead
+    let node = __sys_malloc(16) 
+    __builtin_poke(node, depth)
+    
+    let left = tree_build(depth - 1)
+    let right = tree_build(depth - 1)
+    
+    // Calculate total nodes in subtree
+    let total = 1 + left + right
+    
+    __sys_free(node) // Clean up immediately for this test
+    return total
+}
+
+// --- Hashing Logic (Bitwise) ---
+fn stress_hashing() {
+    __sys_print("Test 4: FNV-1a Hash Simulation... ")
+    
+    // FNV-1a constants
+    let prime = 1099511628211
+    let offset = 2166136261 // 32-bit FNV offset (safe for all ints)
+    
+    let hash = offset
+    
+    // Hash sequence 0..99
+    let i = 0
+    while (i < 100) {
+        // hash = hash ^ byte
+        // In lieu of XOR operator, we simulate simple mixing:
+        hash = hash + i 
+        
+        // hash = hash * prime
+        hash = hash * prime
+        
+        i = i + 1
+    }
+    
+    // Just ensure it didn't crash and produced non-zero
+    if (hash != 0) {
+        __sys_println("PASSED")
+    } else {
+        __sys_println("FAILED")
+    }
+    return 0
+}

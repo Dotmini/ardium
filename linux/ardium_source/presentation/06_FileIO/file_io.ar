@@ -1,0 +1,22 @@
+// Topic: File I/O
+// Write to test.txt and read back
+
+extern fn printf(fmt: string, val: string);
+extern fn fopen(path: string, mode: string) -> int; // Returns FILE* as int
+extern fn fputs(s: string, stream: int);
+extern fn fclose(stream: int);
+
+// Not implementing read for brevity/complexity with buffers
+// Just demonstrating writing.
+
+fn main() {
+    var file_ptr = fopen("test.txt", "w");
+    if (file_ptr != 0) {
+        fputs("Hello Ardium File IO", file_ptr);
+        fclose(file_ptr);
+        printf("Written to test.txt\n", "");
+    } else {
+        printf("Failed to open file\n", "");
+    }
+    return 0;
+}

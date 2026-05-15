@@ -1,0 +1,10 @@
+// stdlib/CoreNetwork.ar - Ardium CoreNetwork Framework
+
+fn Fetch(url) {
+    return ardium_http_get(url)
+}
+
+fn Post(url, data) {
+    // To be implemented
+    return ""
+}

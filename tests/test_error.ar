@@ -1,0 +1,4 @@
+// tests/test_error.ar
+fn main() {
+    let x = ; // Syntax error
+}

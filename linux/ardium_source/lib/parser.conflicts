@@ -1,0 +1,238 @@
+
+** Conflict (shift/reduce) in state 66.
+** Token involved: RPAREN
+** This state is reached from prog after reading:
+
+FN ID LPAREN loption(separated_nonempty_list(COMMA,ID)) RPAREN LBRACE GLOBAL_KEY LPAREN ID
+
+** The derivations that appear below have the following common factor:
+** (The question mark symbol (?) represents the spot where the derivations begin to differ.)
+
+prog 
+list(top_level) EOF 
+top_level list(top_level) 
+FN ID LPAREN loption(separated_nonempty_list(COMMA,ID)) RPAREN LBRACE list(stmt) RBRACE 
+                                                                      stmt list(stmt) 
+                                                                      (?)
+
+** In state 66, looking ahead at RPAREN, reducing production
+** expr -> ID
+** is permitted because of the following sub-derivation:
+
+GLOBAL_KEY LPAREN expr RPAREN AS ID SEMI // lookahead token appears
+                  ID . 
+
+** In state 66, looking ahead at RPAREN, shifting is permitted
+** because of the following sub-derivation:
+
+GLOBAL_KEY LPAREN ID . RPAREN EQUAL LPAREN loption(separated_nonempty_list(COMMA,expr)) RPAREN SEMI 
+
+** Conflict (shift/reduce) in state 38.
+** Token involved: DOT
+** This state is reached from prog after reading:
+
+FN ID LPAREN loption(separated_nonempty_list(COMMA,ID)) RPAREN LBRACE expr EQ_EQ expr
+
+** The derivations that appear below have the following common factor:
+** (The question mark symbol (?) represents the spot where the derivations begin to differ.)
+
+prog 
+list(top_level) EOF 
+top_level list(top_level) 
+FN ID LPAREN loption(separated_nonempty_list(COMMA,ID)) RPAREN LBRACE list(stmt) RBRACE 
+                                                                      stmt list(stmt) 
+                                                                      expr EQUAL expr SEMI 
+                                                                      (?)
+
+** In state 38, looking ahead at DOT, reducing production
+** expr -> expr EQ_EQ expr
+** is permitted because of the following sub-derivation:
+
+expr DOT ID // lookahead token appears
+expr EQ_EQ expr . 
+
+** In state 38, looking ahead at DOT, shifting is permitted
+** because of the following sub-derivation:
+
+expr EQ_EQ expr 
+           expr . DOT ID 
+
+** Conflict (shift/reduce) in state 36.
+** Token involved: DOT
+** This state is reached from prog after reading:
+
+FN ID LPAREN loption(separated_nonempty_list(COMMA,ID)) RPAREN LBRACE expr GREATER expr
+
+** The derivations that appear below have the following common factor:
+** (The question mark symbol (?) represents the spot where the derivations begin to differ.)
+
+prog 
+list(top_level) EOF 
+top_level list(top_level) 
+FN ID LPAREN loption(separated_nonempty_list(COMMA,ID)) RPAREN LBRACE list(stmt) RBRACE 
+                                                                      stmt list(stmt) 
+                                                                      expr EQUAL expr SEMI 
+                                                                      (?)
+
+** In state 36, looking ahead at DOT, reducing production
+** expr -> expr GREATER expr
+** is permitted because of the following sub-derivation:
+
+expr DOT ID // lookahead token appears
+expr GREATER expr . 
+
+** In state 36, looking ahead at DOT, shifting is permitted
+** because of the following sub-derivation:
+
+expr GREATER expr 
+             expr . DOT ID 
+
+** Conflict (shift/reduce) in state 34.
+** Token involved: DOT
+** This state is reached from prog after reading:
+
+FN ID LPAREN loption(separated_nonempty_list(COMMA,ID)) RPAREN LBRACE expr LESS expr
+
+** The derivations that appear below have the following common factor:
+** (The question mark symbol (?) represents the spot where the derivations begin to differ.)
+
+prog 
+list(top_level) EOF 
+top_level list(top_level) 
+FN ID LPAREN loption(separated_nonempty_list(COMMA,ID)) RPAREN LBRACE list(stmt) RBRACE 
+                                                                      stmt list(stmt) 
+                                                                      expr EQUAL expr SEMI 
+                                                                      (?)
+
+** In state 34, looking ahead at DOT, reducing production
+** expr -> expr LESS expr
+** is permitted because of the following sub-derivation:
+
+expr DOT ID // lookahead token appears
+expr LESS expr . 
+
+** In state 34, looking ahead at DOT, shifting is permitted
+** because of the following sub-derivation:
+
+expr LESS expr 
+          expr . DOT ID 
+
+** Conflict (shift/reduce) in state 32.
+** Token involved: DOT
+** This state is reached from prog after reading:
+
+FN ID LPAREN loption(separated_nonempty_list(COMMA,ID)) RPAREN LBRACE expr MINUS expr
+
+** The derivations that appear below have the following common factor:
+** (The question mark symbol (?) represents the spot where the derivations begin to differ.)
+
+prog 
+list(top_level) EOF 
+top_level list(top_level) 
+FN ID LPAREN loption(separated_nonempty_list(COMMA,ID)) RPAREN LBRACE list(stmt) RBRACE 
+                                                                      stmt list(stmt) 
+                                                                      expr EQUAL expr SEMI 
+                                                                      (?)
+
+** In state 32, looking ahead at DOT, reducing production
+** expr -> expr MINUS expr
+** is permitted because of the following sub-derivation:
+
+expr DOT ID // lookahead token appears
+expr MINUS expr . 
+
+** In state 32, looking ahead at DOT, shifting is permitted
+** because of the following sub-derivation:
+
+expr MINUS expr 
+           expr . DOT ID 
+
+** Conflict (shift/reduce) in state 30.
+** Token involved: DOT
+** This state is reached from prog after reading:
+
+FN ID LPAREN loption(separated_nonempty_list(COMMA,ID)) RPAREN LBRACE expr DIV expr
+
+** The derivations that appear below have the following common factor:
+** (The question mark symbol (?) represents the spot where the derivations begin to differ.)
+
+prog 
+list(top_level) EOF 
+top_level list(top_level) 
+FN ID LPAREN loption(separated_nonempty_list(COMMA,ID)) RPAREN LBRACE list(stmt) RBRACE 
+                                                                      stmt list(stmt) 
+                                                                      expr EQUAL expr SEMI 
+                                                                      (?)
+
+** In state 30, looking ahead at DOT, reducing production
+** expr -> expr DIV expr
+** is permitted because of the following sub-derivation:
+
+expr DOT ID // lookahead token appears
+expr DIV expr . 
+
+** In state 30, looking ahead at DOT, shifting is permitted
+** because of the following sub-derivation:
+
+expr DIV expr 
+         expr . DOT ID 
+
+** Conflict (shift/reduce) in state 28.
+** Token involved: DOT
+** This state is reached from prog after reading:
+
+FN ID LPAREN loption(separated_nonempty_list(COMMA,ID)) RPAREN LBRACE expr PLUS expr
+
+** The derivations that appear below have the following common factor:
+** (The question mark symbol (?) represents the spot where the derivations begin to differ.)
+
+prog 
+list(top_level) EOF 
+top_level list(top_level) 
+FN ID LPAREN loption(separated_nonempty_list(COMMA,ID)) RPAREN LBRACE list(stmt) RBRACE 
+                                                                      stmt list(stmt) 
+                                                                      expr EQUAL expr SEMI 
+                                                                      (?)
+
+** In state 28, looking ahead at DOT, reducing production
+** expr -> expr PLUS expr
+** is permitted because of the following sub-derivation:
+
+expr DOT ID // lookahead token appears
+expr PLUS expr . 
+
+** In state 28, looking ahead at DOT, shifting is permitted
+** because of the following sub-derivation:
+
+expr PLUS expr 
+          expr . DOT ID 
+
+** Conflict (shift/reduce) in state 24.
+** Token involved: DOT
+** This state is reached from prog after reading:
+
+FN ID LPAREN loption(separated_nonempty_list(COMMA,ID)) RPAREN LBRACE expr TIMES expr
+
+** The derivations that appear below have the following common factor:
+** (The question mark symbol (?) represents the spot where the derivations begin to differ.)
+
+prog 
+list(top_level) EOF 
+top_level list(top_level) 
+FN ID LPAREN loption(separated_nonempty_list(COMMA,ID)) RPAREN LBRACE list(stmt) RBRACE 
+                                                                      stmt list(stmt) 
+                                                                      expr EQUAL expr SEMI 
+                                                                      (?)
+
+** In state 24, looking ahead at DOT, reducing production
+** expr -> expr TIMES expr
+** is permitted because of the following sub-derivation:
+
+expr DOT ID // lookahead token appears
+expr TIMES expr . 
+
+** In state 24, looking ahead at DOT, shifting is permitted
+** because of the following sub-derivation:
+
+expr TIMES expr 
+           expr . DOT ID 

@@ -1,0 +1,15 @@
+extern fn strlen(s) -> i64
+extern fn malloc(size) -> ptr
+extern fn free(ptr)
+
+fn main() {
+    println("String check");
+    let s = "Hello";
+    let len = strlen(s);
+    println(len);
+    
+    let m = malloc(16);
+    println(m);
+    free(m);
+    return 0;
+}
