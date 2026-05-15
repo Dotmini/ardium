@@ -1,0 +1,45 @@
+// stdlib/Runtime/Db.ar
+// Ardium Self-Hosting Runtime: SQLite Database Integration
+
+import "Runtime/String"
+
+struct Database {
+    ptr: int // Pointer to sqlite3 struct
+}
+
+// Open a SQLite database file
+fn Db_open(path: int) -> int {
+    let path_str = String_cstr(path)
+    let ptr = __sys_sqlite_open(path_str)
+    
+    if (ptr == 0) {
+        err("Failed to open SQLite database")
+        return 0
+    }
+    
+    let db = alloc(8) // sizeof(Database)
+    __builtin_poke(db + 0, ptr)
+    return db
+}
+
+// Execute a SQL query
+fn Db_exec(db: int, query: int) {
+    if (db == 0) { return 0 }
+    
+    let ptr = __builtin_peek(db + 0)
+    let query_str = String_cstr(query)
+    
+    let res = __sys_sqlite_exec(ptr, query_str)
+    if (res < 0) {
+        err("SQLite query execution failed")
+        return 0
+    }
+    return 1
+}
+
+// Close the database
+fn Db_close(db: int) {
+    if (db == 0) { return 0 }
+    let ptr = __builtin_peek(db + 0)
+    __sys_sqlite_close(ptr)
+}

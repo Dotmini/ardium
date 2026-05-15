@@ -321,6 +321,22 @@ module Builtins = struct
     match lookup_function "__sys_accept" ctx.Context.the_module with
     | Some f -> f | None -> declare_function "__sys_accept" ty ctx.Context.the_module
 
+  (* --- Database Intrinsics --- *)
+  let get_or_declare_sys_sqlite_open ctx =
+    let ty = function_type (Types.i64_type ctx) [| Types.i8_ptr_type ctx |] in
+    match lookup_function "__sys_sqlite_open" ctx.Context.the_module with
+    | Some f -> f | None -> declare_function "__sys_sqlite_open" ty ctx.Context.the_module
+
+  let get_or_declare_sys_sqlite_exec ctx =
+    let ty = function_type (Types.i32_type ctx) [| Types.i64_type ctx; Types.i8_ptr_type ctx |] in
+    match lookup_function "__sys_sqlite_exec" ctx.Context.the_module with
+    | Some f -> f | None -> declare_function "__sys_sqlite_exec" ty ctx.Context.the_module
+
+  let get_or_declare_sys_sqlite_close ctx =
+    let ty = function_type (Types.void_type ctx) [| Types.i64_type ctx |] in
+    match lookup_function "__sys_sqlite_close" ctx.Context.the_module with
+    | Some f -> f | None -> declare_function "__sys_sqlite_close" ty ctx.Context.the_module
+
   let get_or_declare_strcmp ctx =
     let strcmp_ty = function_type (Types.i32_type ctx)
                       [| Types.i8_ptr_type ctx; Types.i8_ptr_type ctx |] in

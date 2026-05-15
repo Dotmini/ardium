@@ -11,9 +11,11 @@
 #include <dlfcn.h>
 #include <pthread.h>
 #include <math.h>
+#include <math.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <sqlite3.h>
 
 // Prevent C++ name mangling for Ardium
 extern "C" {
@@ -153,6 +155,38 @@ int __sys_accept(int fd) {
     struct sockaddr_in address;
     socklen_t addrlen = sizeof(address);
     return accept(fd, (struct sockaddr*)&address, &addrlen);
+}
+
+// ============================================================================
+// DATABASE (SQLite3 wrapper)
+// ============================================================================
+
+long long __sys_sqlite_open(const char* path) {
+    sqlite3* db;
+    int rc = sqlite3_open(path, &db);
+    if (rc) {
+        sqlite3_close(db);
+        return 0; // Return 0 (null) on failure
+    }
+    return (long long)(intptr_t)db; 
+}
+
+int __sys_sqlite_exec(long long db_ptr, const char* query) {
+    sqlite3* db = (sqlite3*)(intptr_t)db_ptr;
+    char* err_msg = 0;
+    int rc = sqlite3_exec(db, query, 0, 0, &err_msg);
+    if (rc != SQLITE_OK) {
+        // We could set the thread-local error here
+        __sys_throw(err_msg);
+        sqlite3_free(err_msg);
+        return -1;
+    }
+    return 0;
+}
+
+void __sys_sqlite_close(long long db_ptr) {
+    sqlite3* db = (sqlite3*)(intptr_t)db_ptr;
+    sqlite3_close(db);
 }
 
 // ============================================================================

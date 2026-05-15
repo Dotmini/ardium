@@ -1,0 +1,45 @@
+import "Runtime/Db"
+import "Runtime/String"
+
+fn main() {
+    println("--- Testing Ardium Database Integration (SQLite) ---");
+
+    let db_path = String_from_cstr("test_users.db")
+    println("Opening database...");
+    
+    let db = 0
+    try {
+        db = Db_open(db_path)
+        println("Database opened successfully!");
+    } catch(e) {
+        print("Error opening database: ")
+        println(e)
+        return 1
+    }
+
+    let create_sql = String_from_cstr("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT);")
+    println("Creating table 'users'...")
+    try {
+        Db_exec(db, create_sql)
+        println("Table created!")
+    } catch(e) {
+        print("SQL Error: ")
+        println(e)
+    }
+
+    let insert_sql = String_from_cstr("INSERT INTO users (name) VALUES ('Ardium Founder');")
+    println("Inserting user 'Ardium Founder'...")
+    try {
+        Db_exec(db, insert_sql)
+        println("Insert successful!")
+    } catch(e) {
+        print("SQL Error: ")
+        println(e)
+    }
+
+    println("Closing database...")
+    Db_close(db)
+
+    println("--- Database Test Complete ---");
+    return 0;
+}
