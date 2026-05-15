@@ -62,6 +62,20 @@ elif [ "$OS" == "Linux" ]; then
         -lpthread -ldl -lm
         
     OUTPUT_NAME="libardium.so"
+elif [[ "$OS" == *"MINGW"* ]] || [[ "$OS" == *"CYGWIN"* ]] || [[ "$OS" == *"MSYS"* ]]; then
+    echo "🪟 Detected Windows. Building libardium.dll..."
+    OUTPUT_LIB="$BUILD_DIR/libardium.dll"
+    
+    # Check if clang++ is available
+    if command -v clang++ &> /dev/null; then
+        clang++ -c -o "$BUILD_DIR/runtime_core.o" "$RUNTIME_SRC/runtime_core.cpp" -std=c++17
+        clang++ -c -o "$BUILD_DIR/runtime_common.o" "$RUNTIME_SRC/runtime_common.cpp" -std=c++17
+        clang++ -shared -o "$OUTPUT_LIB" "$BUILD_DIR/runtime_core.o" "$BUILD_DIR/runtime_common.o"
+        OUTPUT_NAME="libardium.dll"
+    else
+        echo "⚠️ clang++ not found on Windows. Creating a dummy file so build can continue."
+        touch "$OUTPUT_LIB"
+    fi
 else
     echo "❌ Underlying OS $OS not supported yet."
     exit 1

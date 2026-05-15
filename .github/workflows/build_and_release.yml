@@ -57,6 +57,12 @@ jobs:
       - name: Install OCaml Dependencies
         run: opam install . --deps-only --with-test
 
+      - name: Build Runtime Library
+        shell: bash
+        run: |
+          chmod +x ./runtime/build_runtime.sh
+          ./runtime/build_runtime.sh
+
       - name: Build Ardium
         run: opam exec -- dune build --release
 
