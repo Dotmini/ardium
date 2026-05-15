@@ -1,0 +1,23 @@
+// stdlib/Runtime/Math.ar
+// Ardium Self-Hosting Runtime: Math Functions
+
+// Math Constants
+let PI = 3.141592653589793
+let E  = 2.718281828459045
+let SQRT2 = 1.414213562373095
+
+// Wrapper for trigonometric functions
+fn sin(x) { return Math.sin(x) }
+fn cos(x) { return Math.cos(x) }
+fn tan(x) { return Math.tan(x) }
+
+// Wrapper for logarithms and exponents
+fn exp(x) { return Math.exp(x) }
+fn log(x) { return Math.log(x) }
+fn pow(base, exponent) { return Math.pow(base, exponent) }
+fn sqrt(x) { return Math.sqrt(x) }
+
+// Rounding
+fn floor(x) { return Math.floor(x) }
+fn ceil(x) { return Math.ceil(x) }
+fn abs(x) { return Math.abs(x) }

@@ -1,0 +1,90 @@
+// stdlib/Runtime/File.ar
+// Ardium Self-Hosting Runtime: File I/O
+
+import "Runtime/Memory"
+import "Runtime/String"
+
+// POSIX Flags
+let O_RDONLY = 0
+let O_WRONLY = 1
+let O_CREAT  = 64
+let O_TRUNC  = 512
+
+// File handle structure
+struct File {
+    fd: int
+    path: int
+}
+
+// Open a file
+fn File_open(path: int, flags: int) -> int {
+    let fd = __sys_open(path, flags, 420) // 420 = 0644 octal
+    if (fd < 0) {
+        err("File not found or access denied")
+        return 0
+    }
+    
+    let f = alloc(16) // sizeof(File)
+    __builtin_poke(f + 0, fd)
+    __builtin_poke(f + 8, path)
+    return f
+}
+
+// Close a file
+fn File_close(f: int) {
+    if (f == 0) { return 0 }
+    let fd = __builtin_peek(f + 0)
+    __sys_close(fd)
+}
+
+// Get file size
+fn File_size(f: int) -> int {
+    let fd = __builtin_peek(f + 0)
+    let size = __sys_lseek(fd, 0, 2) // SEEK_END
+    __sys_lseek(fd, 0, 0) // SEEK_SET
+    return size
+}
+
+// Read entire file as string
+fn File_read_text(path: int) -> int {
+    let f = 0
+    try {
+        f = File_open(path, O_RDONLY)
+    } catch(e) {
+        err("Failed to open file for reading")
+        return 0
+    }
+    
+    let size = File_size(f)
+    if (size <= 0) {
+        File_close(f)
+        return String_from_bytes(0, 0)
+    }
+    
+    let buffer = alloc(size)
+    let fd = __builtin_peek(f + 0)
+    __sys_read(fd, buffer, size)
+    
+    File_close(f)
+    
+    return String_from_bytes(buffer, size)
+}
+
+// Write string to file
+fn File_write_text(path: int, content: int) {
+    let f = 0
+    try {
+        f = File_open(path, O_WRONLY + O_CREAT + O_TRUNC)
+    } catch(e) {
+        err("Failed to open file for writing")
+        return 0
+    }
+    
+    let data = String_cstr(content)
+    let length = String_length(content)
+    let fd = __builtin_peek(f + 0)
+    
+    __sys_write(fd, data, length)
+    
+    File_close(f)
+}

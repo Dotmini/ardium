@@ -1,0 +1,31 @@
+import "Runtime/File"
+import "Runtime/String"
+
+fn main() {
+    println("--- Testing Ardium File I/O ---");
+
+    let test_file = "output.txt";
+    let test_content = "Hello from Ardium File I/O!";
+
+    // Test 1: Write File
+    println("Writing to file...");
+    File_write_text(test_file, test_content);
+    println("Write complete.");
+
+    // Test 2: Read File
+    println("Reading from file...");
+    let read_content = File_read_text(test_file);
+    print("Content: ");
+    String_println(read_content);
+
+    // Test 3: Read Non-existent File (Try/Catch)
+    println("Reading non-existent file...");
+    try {
+        let missing = File_read_text("does_not_exist.txt");
+    } catch(e) {
+        print("Expected Error Caught: ");
+        println(e);
+    }
+
+    println("--- File I/O Test Complete ---");
+}

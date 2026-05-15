@@ -270,6 +270,36 @@ module Builtins = struct
     | Some f -> f
     | None -> declare_function "__sys_pthread_join" ty ctx.Context.the_module
 
+  (* --- File I/O Intrinsics --- *)
+  let get_or_declare_sys_open ctx =
+    let ty = function_type (Types.i32_type ctx) 
+        [| Types.i8_ptr_type ctx; Types.i32_type ctx; Types.i32_type ctx |] in
+    match lookup_function "__sys_open" ctx.Context.the_module with
+    | Some f -> f | None -> declare_function "__sys_open" ty ctx.Context.the_module
+
+  let get_or_declare_sys_close ctx =
+    let ty = function_type (Types.i32_type ctx) [| Types.i32_type ctx |] in
+    match lookup_function "__sys_close" ctx.Context.the_module with
+    | Some f -> f | None -> declare_function "__sys_close" ty ctx.Context.the_module
+
+  let get_or_declare_sys_read ctx =
+    let ty = function_type (Types.i64_type ctx) 
+        [| Types.i32_type ctx; Types.i8_ptr_type ctx; Types.i64_type ctx |] in
+    match lookup_function "__sys_read" ctx.Context.the_module with
+    | Some f -> f | None -> declare_function "__sys_read" ty ctx.Context.the_module
+
+  let get_or_declare_sys_write ctx =
+    let ty = function_type (Types.i64_type ctx) 
+        [| Types.i32_type ctx; Types.i8_ptr_type ctx; Types.i64_type ctx |] in
+    match lookup_function "__sys_write" ctx.Context.the_module with
+    | Some f -> f | None -> declare_function "__sys_write" ty ctx.Context.the_module
+
+  let get_or_declare_sys_lseek ctx =
+    let ty = function_type (Types.i64_type ctx) 
+        [| Types.i32_type ctx; Types.i64_type ctx; Types.i32_type ctx |] in
+    match lookup_function "__sys_lseek" ctx.Context.the_module with
+    | Some f -> f | None -> declare_function "__sys_lseek" ty ctx.Context.the_module
+
   let get_or_declare_strcmp ctx =
     let strcmp_ty = function_type (Types.i32_type ctx)
                       [| Types.i8_ptr_type ctx; Types.i8_ptr_type ctx |] in
