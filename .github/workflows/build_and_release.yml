@@ -52,18 +52,12 @@ jobs:
       - name: Build Ardium
         run: opam exec -- dune build --release
 
-      - name: Prepare Artifacts
+      - name: Prepare Artifacts (DMG/PKG)
         shell: bash
         run: |
-          mkdir -p dist
-          if [ "$RUNNER_OS" == "Windows" ]; then
-            cp _build/default/bin/main.exe dist/ardium.exe
-          else
-            cp _build/default/bin/main.exe dist/ardium
-          fi
-          # Also package stdlib and runtime if they are needed alongside the binary
-          cp -r stdlib dist/ || true
-          cp -r lib dist/ || true
+          brew install create-dmg
+          chmod +x ./create_dmg_installer.sh
+          ./create_dmg_installer.sh
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4

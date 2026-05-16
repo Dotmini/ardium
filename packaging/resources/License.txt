@@ -1,0 +1,21 @@
+Dotmini Software Enterprise License Agreement
+
+IMPORTANT - READ CAREFULLY:
+
+This End User License Agreement ("EULA") is a legal agreement between you (either an individual or a single entity) and Dotmini Software for the software product identified above, which includes computer software and may include associated media, printed materials, and "online" or electronic documentation ("SOFTWARE PRODUCT").
+
+By installing, copying, or otherwise using the SOFTWARE PRODUCT, you agree to be bound by the terms of this EULA. If you do not agree to the terms of this EULA, do not install or use the SOFTWARE PRODUCT.
+
+1. GRANT OF LICENSE.
+Dotmini Software grants you the right to install and use copies of the SOFTWARE PRODUCT on your computer running a validly licensed copy of the operating system for which the SOFTWARE PRODUCT was designed.
+
+2. DESCRIPTION OF OTHER RIGHTS AND LIMITATIONS.
+Limitations on Reverse Engineering, Decompilation, and Disassembly. You may not reverse engineer, decompile, or disassemble the SOFTWARE PRODUCT, except and only to the extent that such activity is expressly permitted by applicable law notwithstanding this limitation.
+
+3. COPYRIGHT.
+All title and copyrights in and to the SOFTWARE PRODUCT are owned by Dotmini Software or its suppliers.
+
+4. DISCLAIMER OF WARRANTY.
+NO WARRANTIES. The SOFTWARE PRODUCT is provided "as is" without warranty of any kind.
+
+(c) 2026 Dotmini Software. All rights reserved.

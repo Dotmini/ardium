@@ -8,10 +8,10 @@ set -e
 #  Branding: Dotmini Software Master Distribution
 # ==============================================================================
 
-VERSION="2.5.5"
+VERSION="2.6.0"
 PKG_NAME="Ardium_v${VERSION}.pkg"
 DMG_NAME="Ardium_v${VERSION}.dmg"
-IDENTIFIER="com.dotmini.ardium.v2"
+IDENTIFIER="com.dotmini.ardium"
 STAGING_ROOT="packaging/root"
 
 echo "🚀 [Major] Initiating Master Distribution Pipeline..."
@@ -77,6 +77,7 @@ cat <<EOF > packaging/master_distribution.xml
 <installer-gui-script minSpecVersion="1">
     <title>Ardium v$VERSION - Titan Engine</title>
     <options customize="never" require-scripts="false"/>
+    <background file="background.png" alignment="bottomleft" scaling="none"/>
     <welcome file="Welcome.html" mime-type="text/html"/>
     <license file="License.txt" mime-type="text/plain"/>
     <choices-outline>
@@ -98,10 +99,26 @@ productbuild --distribution packaging/master_distribution.xml \
 
 # 9. Create DMG Wrapper
 echo "🔹 Forging DMG container..."
-hdiutil create -volname "Ardium v$VERSION" \
-               -srcfolder "dist/$PKG_NAME" \
-               -ov -format UDZO \
-               "dist/$DMG_NAME"
+
+# Try to use create-dmg if available for beautiful layout
+if command -v create-dmg &> /dev/null; then
+    create-dmg \
+        --volname "Ardium v$VERSION" \
+        --background "packaging/resources/background.png" \
+        --window-pos 200 120 \
+        --window-size 800 400 \
+        --icon-size 100 \
+        --icon "$PKG_NAME" 400 200 \
+        --hide-extension "$PKG_NAME" \
+        --app-drop-link 600 200 \
+        "dist/$DMG_NAME" \
+        "dist/$PKG_NAME" || hdiutil create -volname "Ardium v$VERSION" -srcfolder "dist/$PKG_NAME" -ov -format UDZO "dist/$DMG_NAME"
+else
+    hdiutil create -volname "Ardium v$VERSION" \
+                   -srcfolder "dist/$PKG_NAME" \
+                   -ov -format UDZO \
+                   "dist/$DMG_NAME"
+fi
 
 # 10. Cleanup
 rm packaging/ArdiumMaster.pkg
