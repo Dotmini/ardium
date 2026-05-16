@@ -8,7 +8,7 @@ set -e
 #  Branding: Dotmini Software Master Distribution
 # ==============================================================================
 
-VERSION="2.6.1"
+VERSION="2.7.1"
 PKG_NAME="Ardium_v${VERSION}.pkg"
 DMG_NAME="Ardium_v${VERSION}.dmg"
 IDENTIFIER="com.dotmini.ardium"
@@ -101,6 +101,11 @@ productbuild --distribution packaging/master_distribution.xml \
 # 9. Create DMG Wrapper
 echo "🔹 Forging DMG container..."
 
+# create-dmg requires a source folder, not a file. 
+# We put the PKG inside a temporary folder.
+mkdir -p dist/dmg_source
+mv "dist/$PKG_NAME" "dist/dmg_source/"
+
 # Try to use create-dmg if available for beautiful layout
 if command -v create-dmg &> /dev/null; then
     create-dmg \
@@ -113,13 +118,17 @@ if command -v create-dmg &> /dev/null; then
         --hide-extension "$PKG_NAME" \
         --app-drop-link 600 200 \
         "dist/$DMG_NAME" \
-        "dist/$PKG_NAME" || hdiutil create -volname "Ardium v$VERSION" -srcfolder "dist/$PKG_NAME" -ov -format UDZO "dist/$DMG_NAME"
+        "dist/dmg_source/" || hdiutil create -volname "Ardium v$VERSION" -srcfolder "dist/dmg_source/" -ov -format UDZO "dist/$DMG_NAME"
 else
     hdiutil create -volname "Ardium v$VERSION" \
-                   -srcfolder "dist/$PKG_NAME" \
+                   -srcfolder "dist/dmg_source/" \
                    -ov -format UDZO \
                    "dist/$DMG_NAME"
 fi
+
+# Move the PKG back to dist so it is uploaded as a separate asset
+mv "dist/dmg_source/$PKG_NAME" "dist/"
+rm -rf dist/dmg_source
 
 # 10. Cleanup
 rm packaging/ArdiumMaster.pkg
