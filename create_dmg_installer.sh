@@ -8,7 +8,7 @@ set -e
 #  Branding: Dotmini Software Master Distribution
 # ==============================================================================
 
-VERSION="2.6.0"
+VERSION="2.6.1"
 PKG_NAME="Ardium_v${VERSION}.pkg"
 DMG_NAME="Ardium_v${VERSION}.dmg"
 IDENTIFIER="com.dotmini.ardium"
@@ -22,6 +22,7 @@ rm -rf "$STAGING_ROOT"
 mkdir -p "$STAGING_ROOT/usr/local/bin"
 mkdir -p "$STAGING_ROOT/usr/local/lib/ardium"
 mkdir -p "$STAGING_ROOT/usr/local/include/ardium"
+mkdir -p dist
 
 # 2. Collect Binaries
 echo "🔹 Harvesting binaries..."
