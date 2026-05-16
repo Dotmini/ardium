@@ -82,13 +82,8 @@ jobs:
           mkdir -p release-assets
           for dir in artifacts/*; do
             if [ -d "$dir" ]; then
-              base=$(basename "$dir")
-              # Archive directories into zip for Windows, tar.gz for others
-              if [[ "$base" == *"windows"* ]]; then
-                cd "$dir" && zip -r "../../release-assets/${base}.zip" ./* && cd ../..
-              else
-                cd "$dir" && tar -czvf "../../release-assets/${base}.tar.gz" ./* && cd ../..
-              fi
+              # Copy all files from the artifact directory directly to release-assets
+              cp -r "$dir"/* release-assets/
             fi
           done
 
