@@ -41,7 +41,7 @@ void print_banner() {
     )" << Color::RESET << std::endl;
 
     std::cout << Color::YELLOW << "   ╔════════════════════════════════════════════════════════════════╗" << std::endl;
-    std::cout << "   ║  DOTMINI SOFTWARE CLI                                  v2.5.5  ║" << std::endl;
+    std::cout << "   ║  DOTMINI SOFTWARE CLI                                  v2.7.0  ║" << std::endl;
     std::cout << "   ╠════════════════════════════════════════════════════════════════╣" << std::endl;
     std::cout << "   ║  USER    : Tirawat Nantamas                                    ║" << std::endl;
     std::cout << "   ║  ROLE    : Founder & Advisor (SPU AI CLUB)                     ║" << std::endl;
@@ -101,21 +101,14 @@ void cmd_run(const std::string& fileName) {
         return;
     }
 
-    std::cout << "🚀 Initiating " << Color::PURPLE << "Titan JIT Engine" << Color::RESET << "..." << std::endl;
-    show_progress("Compiling Titan Runtime...", 5);
-    show_progress("Linking Metal GPU Shaders...", 5);
-    show_progress("Injecting Vision AI Matrix...", 5);
+    std::cout << "🚀 Executing via " << Color::PURPLE << "Titan JIT Engine" << Color::RESET << "..." << std::endl;
     
-    std::cout << "\n" << Color::BOLD << "--- EXECUTION START ---" << Color::RESET << std::endl;
-    
-    // Call the real Titan VM
-    std::string cmd = find_script_engine() + " " + fileName;
+    // Call the real OCaml Backend in JIT mode
+    std::string cmd = find_backend() + " run " + fileName;
     int status = std::system(cmd.c_str());
     
     if (status != 0) {
-        std::cerr << Color::RED << "\n❌ Execution failed with status: " << status << Color::RESET << std::endl;
-    } else {
-        std::cout << Color::BOLD << "--- EXECUTION END ---" << Color::RESET << std::endl;
+        std::cerr << Color::RED << "\n❌ Execution failed." << Color::RESET << std::endl;
     }
 }
 
@@ -145,15 +138,35 @@ void cmd_build(const std::string& fileName) {
 
 // --- Command: DEV ---
 void cmd_dev(const std::string& fileName) {
+    if (!fs::exists(fileName)) {
+        std::cerr << Color::RED << "❌ Error: File '" << fileName << "' not found." << Color::RESET << std::endl;
+        return;
+    }
+
     std::cout << Color::YELLOW << "🔄 Hot-Reload Mode Active." << Color::RESET << std::endl;
-    std::cout << "   Watching: " << fileName << " (Press Ctrl+C to stop)" << std::endl;
+    std::cout << "   Watching: " << fileName << " (Press Ctrl+C to stop)\n" << std::endl;
     
-    int cycles = 0;
-    while (cycles < 3) { // Limited for demo, would be infinite loop
-        std::cout << Color::BOLD << "\n[DEV] File modified. Re-running..." << Color::RESET << std::endl;
-        cmd_run(fileName);
-        std::this_thread::sleep_for(std::chrono::seconds(2));
-        cycles++;
+    auto last_time = fs::last_write_time(fileName);
+    cmd_run(fileName);
+
+    while (true) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        
+        try {
+            auto current_time = fs::last_write_time(fileName);
+            if (current_time != last_time) {
+                last_time = current_time;
+                
+                // Clear console securely
+                std::system("clear || cls");
+                
+                std::cout << Color::YELLOW << "🔄 File changed. Reloading " << fileName << "..." << Color::RESET << std::endl;
+                cmd_run(fileName);
+            }
+        } catch (const std::exception& e) {
+            // File might be temporarily locked or deleted by the editor
+            continue;
+        }
     }
 }
 
