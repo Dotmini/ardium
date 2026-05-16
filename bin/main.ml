@@ -116,10 +116,7 @@ let process_file input_path output_path =
       else "/usr/local/ardium/stdlib"
   in
 
-  let modules_path =
-    if Sys.file_exists "ardium_modules" then "ardium_modules"
-    else stdlib_path
-  in
+
 
   (* Automatically load Core if NO_STD is not set *)
   let base_program =

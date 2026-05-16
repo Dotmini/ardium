@@ -1140,7 +1140,7 @@ module Stmt = struct
                   [||] "" ctx.Context.builder)
 
     | Reset -> error "Reset not implemented"
-    | Err msg -> error (match msg with Some s -> "Err: " ^ s | None -> "Err")
+
     | GlobalDecl _ -> error "GlobalDecl stmt not implemented"
     | Decorator _ -> error "Decorator stmt not implemented"
     | ClassDecl _ -> error "ClassDecl stmt not implemented"
