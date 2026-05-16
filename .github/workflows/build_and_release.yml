@@ -15,23 +15,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: linux
-            arch: x86_64
-            runner: ubuntu-latest
-          - os: linux
-            arch: arm64
-            runner: ubuntu-24.04-arm
-          - os: macos
-            arch: x86_64
-            runner: macos-13
           - os: macos
             arch: arm64
             runner: macos-14
-          - os: windows
-            arch: x86_64
-            runner: windows-latest
-          # Windows ARM64 is not natively supported by GitHub-hosted runners yet.
-          # To fully support Windows ARM64, cross-compilation or a self-hosted runner would be required.
 
     steps:
       - name: Checkout repository
