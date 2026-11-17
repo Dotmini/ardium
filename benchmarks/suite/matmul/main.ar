@@ -1,0 +1,34 @@
+fn main() {
+    let a0 = args()
+    let mut n = 400
+    if a0.len() > 1 { n = a0[1].to_int() ?? n }
+    let mut a: [[float]] = []
+    let mut b: [[float]] = []
+    for i in 0..n {
+        let mut ra = [0.0; n]
+        let mut rb = [0.0; n]
+        for j in 0..n {
+            ra[j] = float((i * j) % 7 + 1)
+            rb[j] = float((i + j) % 5 + 1)
+        }
+        a.push(ra)
+        b.push(rb)
+    }
+    let mut c: [[float]] = []
+    for i in 0..n {
+        let mut row = [0.0; n]
+        let ai = a[i]
+        for k in 0..n {
+            let aik = ai[k]
+            let bk = b[k]
+            for j in 0..n { row[j] += aik * bk[j] }
+        }
+        c.push(row)
+    }
+    let mut total = 0.0
+    for i in 0..n {
+        let ci = c[i]
+        for j in 0..n { total += ci[j] }
+    }
+    println(int(total), int(c[n / 2][n / 2]))
+}

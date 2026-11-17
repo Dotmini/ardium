@@ -1,0 +1,30 @@
+fn main() {
+    let a = args()
+    let mut size = 2000
+    if a.len() > 1 { size = a[1].to_int() ?? size }
+    let max_iter = 100
+    let mut inside = 0
+    for y in 0..size {
+        let ci = -1.5 + 3.0 * float(y) / float(size)
+        for x in 0..size {
+            let cr = -2.0 + 3.0 * float(x) / float(size)
+            let mut zr = 0.0
+            let mut zi = 0.0
+            let mut i = 0
+            let mut escaped = false
+            while i < max_iter {
+                let zr2 = zr * zr
+                let zi2 = zi * zi
+                if zr2 + zi2 > 4.0 {
+                    escaped = true
+                    break
+                }
+                zi = 2.0 * zr * zi + ci
+                zr = zr2 - zi2 + cr
+                i += 1
+            }
+            if !escaped { inside += 1 }
+        }
+    }
+    println(inside)
+}
