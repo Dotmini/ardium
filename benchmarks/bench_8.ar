@@ -1,0 +1,19 @@
+
+let mut seed = 123456789;
+let a = 1103515245;
+let c = 12345;
+let m = 2147483647;
+let mut sum_rand = 0;
+let mut i = 0;
+
+fn main() {
+    while (i < 2000000) {
+        seed = ((seed * a) + c) % m;
+        if (seed < 0) {
+            seed = seed + m;
+        }
+        sum_rand = (sum_rand + (seed % 100)) % 1000000007;
+        i = i + 1;
+    }
+    println(sum_rand);
+}

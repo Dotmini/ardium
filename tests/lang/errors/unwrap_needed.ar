@@ -1,0 +1,4 @@
+// ERROR: cannot apply `+` to `?int` and `int`
+// ERROR: unwrap the optional first
+fn main() { let v = parse_int("4")
+ println(v + 1) }

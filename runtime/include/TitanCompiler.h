@@ -23,9 +23,10 @@ namespace Ardium::Titan::Compiler {
         OP_RETURN,      // [OP]
         OP_POP,         // [OP]
         OP_PRINT,       // [OP]
+        OP_PRINT_RAW,   // [OP]
         
         // Arithmetic & Logic
-        OP_ADD, OP_SUB, OP_MUL, OP_DIV,
+        OP_ADD, OP_SUB, OP_MUL, OP_DIV, OP_MOD,
         OP_EQ, OP_NE, OP_LT, OP_GT, OP_LE, OP_GE,
         
         // Control Flow
@@ -103,6 +104,15 @@ namespace Ardium::Titan::Compiler {
         std::string toString(int indent) const override;
         void codegen(Program& prog) override;
     };
+
+    struct AssignmentStmt : ASTNode {
+        std::string name;
+        std::shared_ptr<Expression> value;
+        AssignmentStmt(const std::string& n, std::shared_ptr<Expression> val)
+            : name(n), value(val) {}
+        std::string toString(int indent) const override { return name + " = ..."; }
+        void codegen(Program& prog) override;
+    };
     
     struct Block : ASTNode {
         std::vector<std::shared_ptr<ASTNode>> statements;
@@ -147,7 +157,8 @@ namespace Ardium::Titan::Compiler {
 
     struct PrintStmt : ASTNode {
         std::shared_ptr<Expression> expr;
-        PrintStmt(std::shared_ptr<Expression> e) : expr(e) {}
+        bool isNewline;
+        PrintStmt(std::shared_ptr<Expression> e, bool nl = true) : expr(e), isNewline(nl) {}
         std::string toString(int indent) const override;
         void codegen(Program& prog) override;
     };
@@ -167,6 +178,7 @@ namespace Ardium::Titan::Compiler {
     class Compiler {
     public:
         static bool Compile(const std::string& source, Program& outProgram);
+        static bool CompileToNativeCpp(const std::string& source, std::string& outCpp);
     };
 
     class Interpreter {

@@ -4,16 +4,16 @@
 #include <vector>
 
 void print_help() {
-    std::cout << "Ardium CLI (arc) v5.0\n";
+    std::cout << "Arc Language CLI (arc) v3.0.0\n";
     std::cout << "Usage:\n";
-    std::cout << "  arc run <file.ar>    Compile and run an Ardium script\n";
+    std::cout << "  arc run <file.ar>    Compile and run an Arc script\n";
     std::cout << "  arc build <file.ar>  Compile to a native executable\n";
     std::cout << "  arc install <pkg>    Install a third-party package\n";
     std::cout << "  arc doctor           Check development environment\n";
 }
 
 void run_doctor() {
-    std::cout << "--- Ardium Doctor ---\n";
+    std::cout << "--- Arc Language Doctor ---\n";
     
     // Check Clang
     std::cout << "[Checking Clang] ";
@@ -56,16 +56,16 @@ int main(int argc, char** argv) {
         
         std::cout << "📦 Fetching package '" << pkgName << "' from registry...\n";
         
-        Ardium::CLI::Builder::RunCommand("mkdir -p ardium_modules");
+        Ardium::CLI::Builder::RunCommand("mkdir -p arc_modules");
         
-        std::string targetFile = "ardium_modules/" + capitalizedPkg + ".ar";
-        std::string content = "// Mock Ardium Package: " + pkgName + "\n\nfn init_" + pkgName + "() {\n    println(\"[DB] Initialized " + pkgName + " connection.\");\n}\n";
+        std::string targetFile = "arc_modules/" + capitalizedPkg + ".ar";
+        std::string content = "// Mock Arc Package: " + pkgName + "\n\nfn init_" + pkgName + "() {\n    println(\"[DB] Initialized " + pkgName + " connection.\");\n}\n";
         
         FILE* f = fopen(targetFile.c_str(), "w");
         if (f) {
             fprintf(f, "%s", content.c_str());
             fclose(f);
-            std::cout << "✅ Successfully installed '" << pkgName << "' into ardium_modules/\n";
+            std::cout << "✅ Successfully installed '" << pkgName << "' into arc_modules/\n";
         } else {
             std::cerr << "❌ Failed to write " << targetFile << "\n";
             return 1;
@@ -96,3 +96,4 @@ int main(int argc, char** argv) {
     std::cerr << "Unknown command: " << command << "\n";
     return 1;
 }
+

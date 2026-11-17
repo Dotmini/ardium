@@ -1,0 +1,4 @@
+// ERROR: mismatched types: expected `int`, found `nil`
+// ERROR: use `?int`
+fn main() { let x: int = nil
+ println(x) }

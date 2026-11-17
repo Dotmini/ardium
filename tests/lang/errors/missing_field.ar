@@ -1,0 +1,4 @@
+// ERROR: missing field `y` in initializer of `P`
+struct P { x: int, y: int }
+fn main() { let p = P { x: 1 }
+ println(p) }

@@ -1,24 +1,43 @@
-.PHONY: build run clean test
+# Arc language toolchain
+CXX      := clang++
+VERSION  := $(shell cat VERSION 2>/dev/null || echo dev)
+CXXFLAGS := -std=c++20 -O2 -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers -DARC_VERSION='"$(VERSION)"' 
+SRC      := src/compiler/ast.cpp src/compiler/lexer.cpp src/compiler/parser.cpp \
+            src/compiler/checker.cpp src/compiler/cgen.cpp src/compiler/driver.cpp src/cli/main.cpp
+HDRS     := $(wildcard src/compiler/*.h)
+EMBED    := build/gen/arc_rt_embed.h
 
-build: gen-version
-	dune build
+.PHONY: build test bench clean legacy-vm bundle install
 
-gen-version:
-	./scripts/gen_version.sh
+build: arc
 
-run: build
-	dune exec -- ardium run $(FILE)
+arc: $(SRC) $(HDRS) $(EMBED) VERSION
+	@echo "🔨 Building arc..."
+	$(CXX) $(CXXFLAGS) -Isrc/compiler -Ibuild/gen $(SRC) -o arc
+	@echo "✅ Built ./arc"
+
+# The C runtime is embedded into the compiler binary.
+$(EMBED): src/runtime/arc_rt.c
+	@mkdir -p build/gen
+	cd src/runtime && xxd -i arc_rt.c > ../../$(EMBED)
+
+test: arc
+	./tests/run_lang_tests.sh
+
+bench: arc
+	python3 benchmarks/compare/run.py
+
+install: arc
+	install -d /usr/local/bin
+	install -m 755 arc /usr/local/bin/arc
 
 clean:
-	dune clean
-	rm -f output.ll myapp output.s *.o
+	rm -f arc arc-vm
+	rm -rf build/gen
 
-test:
-	dune build
-	dune exec -- ardium test.ar
-	clang -x objective-c test.o lib/runtime.c -o myapp -framework Cocoa -framework Accelerate -DARDIUM_GUI_BUILD -lm
-	./myapp
+# Old bytecode VM (kept for reference; superseded by ./arc)
+legacy-vm:
+	clang++ runtime/src/ArcScript.cpp runtime/src/ArcCompiler.cpp runtime/src/ArcInterpreter.cpp -std=c++20 -O3 -Iruntime/include -o arc-vm
 
-bundle: build
-	chmod +x packaging/make_pkg.sh packaging/make_dmg.sh
-	cd packaging && ./make_pkg.sh && ./make_dmg.sh
+bundle:
+	bash final_build.sh

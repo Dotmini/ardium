@@ -1,0 +1,21 @@
+
+let mut sum_sqrt = 0;
+let mut i = 1;
+let mut n = 1;
+let mut x = 1;
+let mut y = 1;
+
+fn main() {
+    while (i <= 500000) {
+        n = i;
+        x = n;
+        y = (x + 1) / 2;
+        while (y < x) {
+            x = y;
+            y = (x + (n / x)) / 2;
+        }
+        sum_sqrt = sum_sqrt + x;
+        i = i + 1;
+    }
+    println(sum_sqrt);
+}

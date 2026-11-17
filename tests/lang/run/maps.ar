@@ -1,0 +1,30 @@
+fn main() {
+    let mut ages = ["alice": 30, "bob": 25]
+    ages["carol"] = 35
+    ages["alice"] += 1
+    println(ages, ages.len())
+    println(ages["bob"], ages.get("dave"), ages.get("bob"), ages.get_or("dave", 0))
+    println(ages.contains("carol"), ages.contains("zed"))
+    println(ages.remove("bob"), ages.remove("bob"), ages)
+    ages["bob"] = 1
+    println(ages.keys(), ages.values())
+    for k, v in ages { print(f"{k}:{v} ") }
+    println()
+    let mut counts: [int: int] = [:]
+    for i in 0..1000 { counts[i % 10] = counts.get_or(i % 10, 0) + 1 }
+    println(counts.len(), counts[3])
+    let mut many: [int: str] = [:]
+    for i in 0..5000 { many[i] = str(i) }
+    for i in 0..5000 {
+        if i % 2 == 0 { many.remove(i) }
+    }
+    println(many.len(), many[4999], many.get(10))
+    let nested: [str: [int]] = ["xs": [1, 2], "ys": []]
+    println(nested)
+    let flags = [true: "yes", false: "no"]
+    println(flags[true], flags[false])
+    let mut e: [str: int] = [:]
+    println(e, e.is_empty())
+    e.clear()
+    println(["a": 1] == ["a": 1], ["a": 1] == ["a": 2])
+}

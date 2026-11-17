@@ -1,0 +1,3 @@
+// ERROR: statements are not allowed at the top level
+// ERROR: move this code into `fn main() { ... }`
+println("hi")

@@ -5,13 +5,13 @@
 
 int main(int argc, char** argv) {
     if (argc < 2) {
-        std::cerr << "Usage: TitanScript <file.ar>" << std::endl;
+        std::cerr << "error: no input file provided\nusage: arc run <file.ar>\n";
         return 1;
     }
 
     std::ifstream file(argv[1]);
     if (!file) {
-        std::cerr << "Error: Could not open file " << argv[1] << std::endl;
+        std::cerr << "error: could not open file '" << argv[1] << "'\n";
         return 1;
     }
 
@@ -19,16 +19,12 @@ int main(int argc, char** argv) {
     buffer << file.rdbuf();
     std::string source = buffer.str();
 
-    std::cout << "--- [Titan] Compiling ---" << std::endl;
-    
     Ardium::Titan::Compiler::Program prog;
     if (Ardium::Titan::Compiler::Compiler::Compile(source, prog)) {
-        std::cout << "--- [Titan] Executing Bytecode ---" << std::endl;
         Ardium::Titan::Compiler::Interpreter::Run(prog);
-        std::cout << "--- [Titan] Finished ---" << std::endl;
         return 0;
     } else {
-        std::cerr << "Compilation Failed." << std::endl;
+        std::cerr << "error: compilation failed\n";
         return 1;
     }
 }

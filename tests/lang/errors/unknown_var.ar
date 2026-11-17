@@ -1,0 +1,4 @@
+// ERROR: cannot find value `countr` in this scope
+// ERROR: a variable with a similar name exists: `counter`
+fn main() { let counter = 1
+ println(countr) }

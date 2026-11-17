@@ -1,0 +1,67 @@
+// functions: params, returns, recursion, inference, early return
+fn add(a: int, b: int) -> int {
+    return a + b
+}
+
+fn fib(n: int) -> int {
+    if n < 2 { return n }
+    return fib(n - 1) + fib(n - 2)
+}
+
+fn is_even(n: int) -> bool {
+    if n == 0 { return true }
+    return is_odd(n - 1)
+}
+
+fn is_odd(n: int) -> bool {
+    if n == 0 { return false }
+    return is_even(n - 1)
+}
+
+// return type inferred from the body
+fn square(x: float) {
+    return x * x
+}
+
+fn greet(name: str) {
+    println("hello, " + name)
+}
+
+fn classify(n: int) -> str {
+    if n < 0 {
+        return "negative"
+    } elif n == 0 {
+        return "zero"
+    } else if n < 10 {
+        return "small"
+    } else {
+        return "large"
+    }
+}
+
+fn first_over(xs: [int], limit: int) -> int {
+    for x in xs {
+        if x > limit { return x }
+    }
+    return -1
+}
+
+fn count_down(mut n: int) -> int {
+    let mut steps = 0
+    while n > 0 {
+        n -= 1
+        steps += 1
+    }
+    return steps
+}
+
+fn main() {
+    println(add(2, 3))
+    println(fib(25))
+    println(is_even(10), is_odd(7), is_even(7))
+    println(square(1.5))
+    greet("arc")
+    println(classify(-3), classify(0), classify(4), classify(40))
+    println(first_over([1, 5, 9, 12], 6), first_over([1, 2], 6))
+    println(count_down(5))
+}

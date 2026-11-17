@@ -1,0 +1,4 @@
+// ERROR: mismatched types: expected `bool`, found `int`
+// ERROR: Arc has no implicit truthiness
+fn main() { let n = 1
+ if n { println("x") } }

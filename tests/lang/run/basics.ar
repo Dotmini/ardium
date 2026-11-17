@@ -1,0 +1,23 @@
+// integers, floats, bools, operators, precedence
+fn main() {
+    println(1 + 2 * 3, (1 + 2) * 3, 10 - 4 - 3, 2 * 3 % 4)
+    println(7 / 2, -7 / 2, 7 % 3, -7 % 3, 7 / -2)
+    println(1 << 10, 1024 >> 3, 6 & 3, 6 | 3, 6 ^ 3, ~0)
+    println(0xff, 0b1010, 0o17, 1_000_000)
+    println(9223372036854775807 + 1)
+    println(1.5 + 2.25, 10.0 / 4.0, 0.1 + 0.2, 1e3, 2.5e-3)
+    println(7.5 % 2.0, -0.0, 1.0 / 3.0)
+    println(3 > 2, 3 < 2, 2 <= 2, 2 >= 3, 1 == 1, 1 != 1)
+    println(true && false, true || false, !true, not false)
+    println(true and true, false or true)
+    let x = 10
+    let y = x * 2 + 1
+    println(y)
+    let f = 2 * 3.5
+    println(f)
+    println(int(3.99), int(-3.99), float(7), 7 as float, 3.7 as int, true as int)
+    println(abs(-5), abs(-2.5), min(3, 9), max(3, 9), min(2.5, 1), max("a", "b"))
+    println(sqrt(16.0), pow(2.0, 10.0), floor(2.7), ceil(2.1), round(2.5), ipow(3, 4))
+    let big = 1 << 62
+    println(big * 4)
+}

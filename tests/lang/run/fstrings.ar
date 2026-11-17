@@ -1,0 +1,19 @@
+struct P { x: int, y: int }
+
+fn main() {
+    let name = "Arc"
+    let n = 42
+    let pi = 3.14159265
+    println(f"{name} has {n} items")
+    println(f"math: {n * 2 + 1}, call: {name.upper()}, idx: {[10, 20][1]}")
+    println(f"pi={pi:.3} pi2={pi:.0} pct={0.5 * 100:.1}%")
+    println(f"[{n:5}] [{n:<5}] [{n:^6}] [{n:05}] [{name:>6}] [{name:*^9}]")
+    println(f"escaped {{braces}} and \"quotes\" and \t tab")
+    println(f"struct: {P { x: 1, y: 2 }}")
+    println(f"list: {[1, 2, 3]} map: {["k": "v"]} opt: {parse_int("x")}")
+    println(f"nested: {f"inner {n}"}")
+    println(f"{"literal string in expr"}")
+    println(f"bool {true} float {2.0} neg {-7}")
+    println(f"")
+    println(f"{name}")
+}

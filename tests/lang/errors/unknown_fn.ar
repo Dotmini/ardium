@@ -1,0 +1,3 @@
+// ERROR: cannot find function `prnitln` in this scope
+// ERROR: a function with a similar name exists: `println`
+fn main() { prnitln("hi") }

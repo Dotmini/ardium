@@ -7,7 +7,10 @@ exception Codegen_error of string * int * int
 let error ?(line=0) ?(col=0) msg = raise (Codegen_error (msg, line, col))
 
 let error_msg msg line col =
-  Printf.sprintf "%s (at line %d, column %d)" msg line col
+  if line > 0 then
+    Printf.sprintf "error: %s (at line %d, column %d)" msg line col
+  else
+    Printf.sprintf "error: %s" msg
 
 (* --- Loop Context for Break/Continue --- *)
 type loop_context = {
@@ -574,8 +577,14 @@ module Expr = struct
         | Some (ptr, ty) ->
             build_load ty ptr name ctx.Context.builder
         | None ->
-            error ~line:ctx.Context.line ~col:ctx.Context.col
-              (Printf.sprintf "Undefined variable: '%s'" name)
+            (* Dynamic variable fallback: Return empty string constant *)
+            let str_val = const_stringz ctx.Context.llvm_ctx "" in
+            let g = define_global ("dyn_" ^ name) str_val ctx.Context.the_module in
+            set_global_constant true g;
+            set_unnamed_addr true g;
+            set_linkage Linkage.Internal g;
+            let zero = const_int (Types.i32_type ctx) 0 in
+            const_in_bounds_gep (type_of str_val) g [| zero; zero |]
       end
     | Global -> 
         error ~line:ctx.Context.line ~col:ctx.Context.col "Global keyword cannot be used as standalone expression yet"

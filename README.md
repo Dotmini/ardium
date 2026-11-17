@@ -1,192 +1,160 @@
-# Ardium Programming Language
+# Arc Programming Language
 
-**Version 2.0.0 (Codename: Ascension)**
+**Version 3.0.0**
+**Architect & Founder:** Tirawat Nantamas (Dotmini Software / SPU AI CLUB)
 
-Ardium is an advanced, high-performance native programming language engineered specifically for macOS. It integrates a declarative, component-driven user interface paradigm with a comprehensive, natively-compiled standard library ecosystem. By leveraging the LLVM compiler infrastructure, Ardium achieves C-level performance while providing modern, high-level abstractions.
+Arc is a statically typed, compiled programming language with Rust-style safety
+and ergonomics and Go-style simplicity: type inference, immutable-by-default
+bindings, optionals instead of null, a garbage collector, and native performance
+on par with Rust and Go.
 
-## 1. Overview and Key Capabilities
+```rust
+struct Account { owner: str, balance: int }
 
-- **Declarative User Interface Architecture**: A sophisticated layout system providing structural paradigms such as `VStack`, `HStack`, and `ZStack`, inspired by modern declarative frameworks.
-- **Hardware-Accelerated Computation**: Native integration with the Apple Accelerate framework for optimized, high-throughput matrix operations and machine learning workloads.
-- **Native Networking Stack**: A robust, built-in HTTP client for synchronous and asynchronous network communications.
-- **Cryptographic Primitives**: Standardized implementation of secure cryptographic hashing algorithms, including SHA-256.
-- **Persistent Storage Mechanisms**: Streamlined file input/output operations for structured data persistence.
-- **Zero-Cost Abstractions**: Direct compilation to optimized LLVM Intermediate Representation (IR) and native machine code, bypassing virtual machine overhead.
-- **Advanced Compiler Design**: A two-pass compilation model facilitating forward referencing and laying the foundation for self-hosting.
-
-## 2. Getting Started
-
-### 2.1. System Requirements
-
-Ensure the following dependencies are installed prior to compiling the Ardium toolchain:
-
-- macOS 12.0 (Monterey) or later
-- OCaml version 4.14 or newer
-- Dune build system
-- LLVM version 14.0 or newer
-- Apple Xcode Command Line Tools
-
-### 2.2. Installation Procedure
-
-To acquire and build the Ardium compiler from source, execute the following commands:
-
-```bash
-# Clone the repository
-git clone <repository-url>
-cd ardium
-
-# Compile the toolchain
-dune build
-
-# Execute a sample application
-dune exec -- ardium run examples/hello.ar
-```
-
-## 3. Language Syntax Examples
-
-### 3.1. Standard Standard Output
-
-```ardium
-import "Core"
-
-fn main() {
-    println("Ardium Execution Environment Initialized.")
-    return 0
-}
-```
-
-### 3.2. Graphical User Interface Initialization
-
-```ardium
-import "Core"
-import "CoreUI"
-
-fn on_click() {
-    println("Event registered: Button click.")
-}
-
-fn build_ui() {
-    VStack(resolve_symbol("content"))
-}
-
-fn content() {
-    Title("Ardium GUI Framework")
-    Subtitle("Version 2.0 Ascension")
-    Spacer(20)
-    Button("Execute Action", resolve_symbol("on_click"))
+impl Account {
+    fn deposit(mut self, amount: int) { self.balance += amount }
 }
 
 fn main() {
-    App("Application Instance", resolve_symbol("build_ui"))
-    return 0
+    let mut acct = Account { owner: "dot", balance: 0 }
+    acct.deposit(150)
+    let words = "to be or not to be".split(" ")
+    let mut freq: [str: int] = [:]
+    for w in words { freq[w] = freq.get_or(w, 0) + 1 }
+    println(f"{acct.owner} has {acct.balance}; freq = {freq}")
 }
 ```
 
-## 4. Documentation References
+## Highlights
 
-Comprehensive documentation for the Ardium programming language and its standard library can be found in the following directories:
+- **Native speed.** Arc compiles to C and then to machine code with clang
+  (`-O2` for `run`, `-O3` for `build`), on par with Rust and Go (see below).
+- **Static types with inference.** `int`, `float`, `bool`, `str`, arrays `[T]`,
+  hash maps `[K: V]`, optionals `?T`, and structs with `impl` methods. There are
+  no implicit conversions and no null.
+- **Safe by default.** Bindings are immutable unless declared `let mut`. Arrays
+  are bounds-checked, integer division by zero is caught, and unbounded
+  recursion is reported as a stack overflow instead of a crash.
+- **Automatic memory.** A precise mark-and-sweep garbage collector with a
+  size-class allocator. There is no `malloc`/`free` in user code.
+- **Helpful errors.** Rust-style diagnostics with source snippets, caret spans,
+  and `help:` suggestions, including "did you mean" fixes for typos.
+- **Batteries included.** f-strings with format specs, string/array/map methods,
+  file I/O, time, random numbers, and a built-in unit-test runner.
 
-- **[API Reference](docs/API_REFERENCE.md)**: Detailed specifications of all available framework functions and modules.
-- **[Implementation Walkthrough](../../.gemini/antigravity/brain/11a28a47-60fd-4dcf-a562-0f893f8592b9/walkthrough.md)**: Architectural and implementation details.
+## Quick start
 
-## 5. Standard Library Ecosystem
-
-The Ardium 2.0.0 release encompasses eight foundational frameworks:
-
-| Framework | Primary Objective | Key Components |
-|-----------|-------------------|----------------|
-| **Core** | System Fundamentals | Standard I/O operations (`print`, `println`) |
-| **CoreUI** | Interface Rendering | `VStack`, `HStack`, `Button`, `TextField`, `Image` |
-| **CoreAI** | Machine Learning | Hardware-accelerated matrix and tensor mathematics |
-| **CoreData** | Persistence Management | File descriptors, input/output streams (`Load`, `Save`) |
-| **CoreNetwork** | Network Protocol Stack| HTTP client utilities (`Fetch`) |
-| **CoreCrypto** | Security and Integrity | Cryptographic hashing (`SHA256`) |
-| **CoreKits** | Utility Functions | Data structures, diagnostic logging |
-| **PlaygroundSupport**| Interactive Development | Hot-module reloading, debugging utilities |
-
-## 6. Toolchain and Build System
-
-The Ardium compiler provides a robust command-line interface for development and compilation:
+Requirements: a C/C++ compiler (`clang`, from Xcode Command Line Tools on macOS) and `make`.
 
 ```bash
-# Purge build artifacts and recompile
-dune clean && dune build
-
-# Interpret and execute an Ardium source file
-dune exec -- ardium run application.ar
-
-# Compile an Ardium source file to a native executable
-dune exec -- ardium build application.ar -o application_binary
-./application_binary
-
-# Execute the automated test suite
-dune exec -- ardium run tests/test_frameworks_basic.ar
+make build                  # builds ./arc (the C runtime is embedded in it)
+./arc doctor                # checks the toolchain end to end
+./arc run examples/wordfreq.ar
 ```
 
-## 7. Project Architecture
+```bash
+arc run main.ar [args...]   # compile (cached) and run
+arc build main.ar -o app    # standalone optimized executable
+arc check main.ar           # type-check only
+arc test                    # run @test functions in tests/ and src/
+arc new myproject           # scaffold a project (arc.toml, src/, tests/)
+arc dev main.ar             # re-run on every save
+```
 
-### 7.1. Directory Structure
+Compiled programs are cached in `~/.cache/arc`, so re-running an unchanged
+program starts instantly.
+
+The full language guide (in Thai) is in **[LANGUAGE_REFERENCE.md](LANGUAGE_REFERENCE.md)**.
+
+## Error messages
 
 ```text
-ardium/
-├── bin/              # Compiler executable entry point
-│   └── main.ml
-├── lib/              # Core compiler implementation
-│   ├── lexer.mll     # Lexical analysis logic
-│   ├── parser.mly    # Syntactic analysis logic
-│   ├── codegen.ml    # LLVM Intermediate Representation generation
-│   └── runtime.m     # Native Objective-C runtime bridge
-├── stdlib/           # Standard library frameworks
-│   ├── Core.ar
-│   ├── CoreUI.ar
-│   └── ...
-├── tests/            # Automated verification suite
-└── docs/             # Technical documentation
+error: cannot assign twice to immutable variable `count`
+  --> main.ar:11:5
+   |
+11 |     count = count + 1
+   |     ^^^^^ cannot assign twice
+   |
+   = help: consider making this binding mutable: `let mut count` (declared at line 10)
+
+error: no field `nmae` on type `User`
+ --> main.ar:5:12
+  |
+5 |  println(u.nmae)
+  |            ^^^^ unknown field
+  |
+  = help: a field with a similar name exists: `name`
 ```
 
-### 7.2. Compilation Pipeline
+Runtime failures point at the source too:
 
-The Ardium compiler translates source code into native executables through a highly optimized pipeline:
+```text
+panic: index out of bounds: the len is 3 but the index is 5
+  --> main.ar:4:13
+```
 
-1. **Lexical Analysis**: Source tokenization via `ocamllex`.
-2. **Syntactic Analysis**: Abstract Syntax Tree (AST) construction via `menhir`.
-3. **Semantic Analysis**: Type inference and validation.
-4. **Intermediate Representation**: Two-pass LLVM IR code generation.
-5. **Native Code Generation**: Final compilation to machine code utilizing the LLVM backend.
+## Performance: Arc vs Rust vs Go
 
-The **Two-Pass Compilation** model operates as follows:
-- **Pass 1 (Declaration)**: Registration of global signatures, types, and external symbol definitions.
-- **Pass 2 (Definition)**: Synthesis of function bodies and resolution of forward-referenced identifiers.
+Six workloads, each written idiomatically in all three languages (all in
+[`benchmarks/compare/`](benchmarks/compare/)). Every program prints the same
+output in all three languages. Times are the best of 3 runs on Apple Silicon
+(arm64, macOS); lower is better.
 
-## 8. Versioning History
+| Benchmark | Workload | Arc | Rust | Go |
+|---|---|---:|---:|---:|
+| fib | recursive calls, fib(40) | 0.281s | 0.289s | 0.323s |
+| sieve | array indexing, primes below 50M | 0.168s | 0.181s | 0.184s |
+| nbody | float math on structs, 5M steps | 0.197s | 0.206s | 0.215s |
+| binary_trees | allocation + GC, depth 18 | 1.220s | 1.431s | 1.075s |
+| wordcount | strings + hash map, 3M inserts | 0.164s | 0.243s | 0.169s |
+| sort | sort 5M ints | 0.106s | 0.093s | 0.375s |
 
-- **Version 2.0.0 (Ascension)**
-  - Introduction of the eight-framework standard library ecosystem.
-  - Implementation of the two-pass compilation architecture.
-  - Integration of the `__builtin_` intrinsics system.
-  - Structural refactoring of the `stdlib/` import namespace.
-  - Establishment of self-hosting compiler foundations.
+Reproduce the results with `make bench` (needs `rustc` and `go`).
 
-- **Version 1.x**
-  - Initial conceptual release and proof-of-concept.
+## Testing
 
-## 9. Contribution Guidelines
+```bash
+make test                   # language test suite (tests/run_lang_tests.sh)
+```
 
-We welcome contributions from the community. Primary areas of interest for future development include:
+The suite has four parts:
+- **Golden-output programs** (`tests/lang/run/`). Each is also re-run with
+  `ARC_GC_STRESS=1`, which collects garbage on every allocation.
+- **Compile-error programs** (`tests/lang/errors/`). Each must fail with the
+  expected messages.
+- **Panic programs** (`tests/lang/panics/`). Each must panic with the expected
+  message and exit code.
+- **`arc test` checks** (`tests/lang/unit/`).
 
-- Compiler optimization passes and LLVM backend tuning.
-- Expansion of the standard library frameworks.
-- Enhancements to the automated test suite coverage.
-- Technical documentation refinement.
+## Architecture
 
-## 10. License
+```text
+src/
+├── cli/main.cpp          arc command-line tool
+├── compiler/
+│   ├── lexer.cpp         tokens, string/f-string literals
+│   ├── parser.cpp        recursive-descent parser → AST
+│   ├── checker.cpp       name resolution, type inference/checking, mutability, diagnostics
+│   ├── cgen.cpp          lowering to C (every value lives in a GC-visible temp)
+│   └── driver.cpp        imports, caching, invoking the C compiler
+└── runtime/arc_rt.c      GC, strings, arrays, maps, formatting, panics (embedded in arc)
+```
 
-The Ardium programming language and its associated toolchain are distributed under the MIT License.
+Pipeline: source → lexer → parser → type checker → C code generation → `cc -O2/-O3`
+→ native executable. The runtime is compiled into each program, so the output
+binaries have no dependencies beyond libc.
 
-## 11. Acknowledgments
+## Status and roadmap
 
-The development of Ardium is made possible through the utilization of:
+Implemented: everything in the language reference. Planned next: `enum` + `match`,
+generics, closures, `Result`-style error handling, module namespaces,
+concurrency, C FFI, and porting the Cocoa/Metal UI bindings from the previous
+toolchain.
 
-- The LLVM Compiler Infrastructure Project
-- Apple Developer Tools and Frameworks
-- The OCaml Programming Language and Community
+The earlier prototype toolchains are kept for reference: the OCaml/LLVM compiler
+in `lib/` and `bin/`, the Titan bytecode VM (`make legacy-vm`), and the old
+README in `docs/legacy/`.
+
+## License
+
+The Arc programming language and its toolchain are distributed under the MIT License.

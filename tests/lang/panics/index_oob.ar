@@ -1,0 +1,7 @@
+// PANIC: index out of bounds: the len is 3 but the index is 3
+// PANIC: index_oob.ar:6:13
+fn main() {
+    let xs = [1, 2, 3]
+    let i = 3
+    println(xs[i])
+}

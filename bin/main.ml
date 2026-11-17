@@ -93,17 +93,23 @@ let rec resolve_imports stdlib_path imported_set program =
 (* Core Compilation Logic *)
 let process_file input_path output_path =
   let chan = try Stdlib.open_in input_path with Sys_error msg ->
-    Printf.eprintf "❌ Error: Cannot open input file '%s': %s\n" input_path msg; exit 1
+    Printf.eprintf "error: cannot open input file '%s': %s\n" input_path msg; exit 1
   in
   let lexbuf = Lexing.from_channel chan in
   let program = try Parser.prog Lexer.read lexbuf with
     | Parser.Error ->
       let pos = Lexing.lexeme_start_p lexbuf in
-      Printf.eprintf "❌ Parse Error in %s at line %d, column %d. Unexpected token: '%s'\n"
+      Printf.eprintf "%s:%d:%d: error: unexpected token '%s'\n"
         input_path pos.pos_lnum (pos.pos_cnum - pos.pos_bol + 1) (Lexing.lexeme lexbuf);
       exit 1
+    | Codegen.Codegen_error (msg, line, col) ->
+      if line > 0 then
+        Printf.eprintf "%s:%d:%d: error: %s\n" input_path line col msg
+      else
+        Printf.eprintf "%s: error: %s\n" input_path msg;
+      exit 1
     | exn ->
-      Printf.eprintf "❌ Error in %s: %s\n" input_path (Printexc.to_string exn);
+      Printf.eprintf "%s: error: %s\n" input_path (Printexc.to_string exn);
       exit 1
   in
   Stdlib.close_in chan;
@@ -212,7 +218,7 @@ let process_file input_path output_path =
           ) else 0
       )
   | Error msg ->
-      Printf.eprintf "❌ Codegen Error in %s: %s\n" input_path msg;
+      Printf.eprintf "%s: %s\n" input_path msg;
       exit 1
 
 let () =

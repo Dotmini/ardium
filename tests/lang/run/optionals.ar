@@ -1,0 +1,36 @@
+fn find(xs: [str], target: str) -> ?int {
+    for i, x in xs {
+        if x == target { return i }
+    }
+    return nil
+}
+
+fn maybe_name(n: int) -> ?str {
+    if n > 0 { return "positive" }
+    return nil
+}
+
+fn main() {
+    let names = ["ann", "ben", "cat"]
+    println(find(names, "ben"), find(names, "zed"))
+    let r = find(names, "cat")
+    if let i = r { println("found at", i) } else { println("missing") }
+    if let i = find(names, "zzz") { println(i) } else { println("missing") }
+    println(find(names, "zed") ?? -1)
+    println(maybe_name(1) ?? "none", maybe_name(-1) ?? "none")
+    let mut o: ?int = nil
+    println(o == nil, o != nil, o.is_nil(), o.is_some())
+    o = 5
+    println(o == nil, o.unwrap(), o.unwrap_or(0), o == 5)
+    let s: ?str = maybe_name(3)
+    println(s.unwrap().upper())
+    let opts: [?int] = [1, nil, 3]
+    println(opts)
+    let mixed = [nil, 2]
+    println(mixed)
+    let mut total = 0
+    for x in opts { total += x ?? 100 }
+    println(total)
+    let chain: ?int = nil
+    println(chain ?? o ?? 0)
+}

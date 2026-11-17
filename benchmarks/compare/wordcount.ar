@@ -1,0 +1,21 @@
+fn main() {
+    let a = args()
+    let mut n = 3000000
+    if a.len() > 1 { n = parse_int(a[1]) ?? n }
+    let mut counts: [str: int] = [:]
+    let mut x = 12345
+    for _ in 0..n {
+        x = (x * 1103515245 + 12345) % 2147483648
+        let key = f"w{x % 50000}"
+        counts[key] = counts.get_or(key, 0) + 1
+    }
+    let mut best = 0
+    let mut best_key = ""
+    for k, v in counts {
+        if v > best || (v == best && k < best_key) {
+            best = v
+            best_key = k
+        }
+    }
+    println(counts.len(), best_key, best)
+}

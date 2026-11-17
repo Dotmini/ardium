@@ -1,0 +1,15 @@
+fn fib(n: int) -> int {
+    if n < 2 { return n }
+    return fib(n - 1) + fib(n - 2)
+}
+
+fn main() {
+    let a = args()
+    let n = if_arg(a, 40)
+    println(fib(n))
+}
+
+fn if_arg(a: [str], d: int) -> int {
+    if a.len() > 1 { return parse_int(a[1]) ?? d }
+    return d
+}

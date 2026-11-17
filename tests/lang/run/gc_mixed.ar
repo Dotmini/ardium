@@ -1,0 +1,40 @@
+// Mixed small and large objects survive many collections with contents intact.
+struct Blob { id: int, text: str, parts: [str], meta: [str: int] }
+
+fn make_blob(id: int) -> Blob {
+    let mut parts: [str] = []
+    for i in 0..(id % 5) { parts.push("p".repeat(i * 150 + 1)) }  // some > 512 bytes
+    let mut meta: [str: int] = [:]
+    meta[f"k{id}"] = id
+    return Blob { id: id, text: "x".repeat(id % 900), parts: parts, meta: meta }
+}
+
+fn checksum(b: Blob) -> int {
+    let mut s = b.id + b.text.len()
+    for p in b.parts { s += p.len() }
+    s += b.meta[f"k{b.id}"]
+    return s
+}
+
+fn main() {
+    let mut keep: [Blob] = []
+    let mut total = 0
+    for round in 0..40 {
+        for i in 0..60 {
+            let b = make_blob(round * 60 + i)
+            if i % 7 == 0 { keep.push(b) }
+            total += checksum(b)
+        }
+        // drop half of what we kept so pages get freed and reused
+        if keep.len() > 100 { keep = keep[50..] }
+    }
+    let mut kept = 0
+    for b in keep { kept += checksum(b) }
+    let mut sorted = [3.5, -1.0, 2.25, -0.0, 100.0, -7.5]
+    sorted.sort()
+    let mut ints = [5, -3, 9223372036854775807, -9223372036854775807, 0, 42]
+    ints.sort()
+    println(total, kept, keep.len())
+    println(sorted)
+    println(ints)
+}

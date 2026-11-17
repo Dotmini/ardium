@@ -79,3 +79,6 @@ linux/ardium_source/_ardium-2.2_backup/
 linux/ardium_source/_dist_staging_backup/
 _build/
 installer/
+
+# Arc benchmark binaries
+benchmarks/compare/bin/

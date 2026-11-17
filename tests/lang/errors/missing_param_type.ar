@@ -1,0 +1,4 @@
+// ERROR: missing type for parameter `a`
+// ERROR: add a type annotation, e.g. `a: int`
+fn add(a, b) { return a + b }
+fn main() { println(add(1, 2)) }

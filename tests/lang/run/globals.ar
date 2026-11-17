@@ -1,0 +1,17 @@
+let mut counter = 0
+let limit = 5
+let names = ["a", "b"]
+let derived = limit * 2
+let mut log: [str] = []
+
+fn bump() -> int {
+    counter += 1
+    log.push(f"bump {counter}")
+    return counter
+}
+
+fn main() {
+    while counter < limit { bump() }
+    println(counter, derived, names)
+    println(log)
+}

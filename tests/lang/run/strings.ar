@@ -1,0 +1,26 @@
+fn main() {
+    let s = "Hello, World"
+    println(s.len(), len(s), s.is_empty(), "".is_empty())
+    println(s.upper(), s.lower())
+    println(s.contains("World"), s.contains("world"), s.starts_with("Hell"), s.ends_with("ld"))
+    println(s.find("o"), s.find("xyz"))
+    println(s[0..5], s[7..], s[..5], s.slice(7, 12))
+    println("  padded  ".trim() + "|")
+    println("a,b,,c".split(","), "one two  three".split_whitespace())
+    println("line1\nline2\r\nline3".lines())
+    println("ab".repeat(3), "x-y-z".replace("-", "+"))
+    println(["a", "b", "c"].join("/"))
+    println("A" < "B", "abc" == "abc", "abc" != "abd", "b" > "abc")
+    println(s.byte_at(0), ord("A"), chr(66), chr(3647))
+    let thai = "สวัสดี"
+    println(thai.len(), thai.char_count(), thai.chars().len())
+    for c in "héllo" { print(c, ".") }
+    println()
+    println("tab\tquote\" backslash\\ unicode \u{1F600}")
+    let mut acc = ""
+    for i in 0..5 { acc += str(i) }
+    println(acc)
+    println(str(42) + str(1.5) + str(true) + str([1, 2]))
+    println("42".to_int(), "x".to_int(), " 7 ".to_int(), "-3".to_int(), "2.5".to_float())
+    println(parse_int("99") ?? 0, parse_float("nan?") ?? -1.0)
+}

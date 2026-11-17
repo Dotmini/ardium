@@ -1,0 +1,23 @@
+
+let mut total_steps = 0;
+let mut i = 1;
+let mut n = 1;
+let mut steps = 0;
+
+fn main() {
+    while (i <= 20000) {
+        n = i;
+        steps = 0;
+        while (n != 1) {
+            if (n % 2 == 0) {
+                n = n / 2;
+            } else {
+                n = (3 * n) + 1;
+            }
+            steps = steps + 1;
+        }
+        total_steps = total_steps + steps;
+        i = i + 1;
+    }
+    println(total_steps);
+}

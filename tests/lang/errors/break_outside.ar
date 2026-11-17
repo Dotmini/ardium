@@ -1,0 +1,2 @@
+// ERROR: `break` outside of a loop
+fn main() { break }
