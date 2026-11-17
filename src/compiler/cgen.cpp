@@ -1,5 +1,7 @@
 #include "cgen.h"
 
+#include <cctype>
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 

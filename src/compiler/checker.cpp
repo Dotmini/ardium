@@ -1,5 +1,6 @@
 #include "checker.h"
 
+#include <cctype>
 #include <algorithm>
 #include <set>
 

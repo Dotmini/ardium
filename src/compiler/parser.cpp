@@ -1,5 +1,6 @@
 #include "parser.h"
 
+#include <cctype>
 #include <set>
 
 namespace arc {

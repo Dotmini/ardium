@@ -1,5 +1,6 @@
 #include "lexer.h"
 
+#include <cctype>
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
