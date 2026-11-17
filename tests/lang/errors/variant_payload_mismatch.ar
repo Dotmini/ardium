@@ -1,0 +1,4 @@
+// ERROR: variant `Shape::Rect` has 2 values, but the pattern names 1
+enum Shape { Rect(int, int) }
+fn main() { let s = Shape::Rect(1, 2)
+ match s { Shape::Rect(w) => println(w) } }

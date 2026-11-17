@@ -1,0 +1,3 @@
+// ERROR: a value of type `int` cannot be called
+fn three() -> int { return 3 }
+fn main() { println(three()(1)) }

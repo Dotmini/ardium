@@ -53,6 +53,11 @@ private:
     void parseItem(std::vector<ImportReq>& imports);
     FnDecl* parseFn(std::vector<std::string> attrs, StructDecl* owner, bool inImpl);
     void parseStruct();
+    void parseEnum();
+    Node* parseMatch(bool asExpr);
+    Node* parsePattern();
+    Node* parseLambda();
+    bool armStmt_ = false;  // parsing a match-arm statement: `,` also ends it
     void parseImpl();
     TypeExpr* parseType();
 

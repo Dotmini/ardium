@@ -1,0 +1,9 @@
+// ERROR: non-exhaustive `match`: `ok(Cmd::Show)` not covered
+enum Cmd { Add(int), Show }
+fn get() -> !Cmd { return Cmd::Show }
+fn main() {
+    match get() {
+        ok(Cmd::Add(n)) => println(n),
+        err(e) => println(e),
+    }
+}

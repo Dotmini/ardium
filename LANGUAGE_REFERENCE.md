@@ -11,15 +11,18 @@
 5. [Control Flow](#control-flow)
 6. [ฟังก์ชัน](#functions)
 7. [Struct และ Method](#structs)
-8. [Optional (`?T`)](#optionals)
-9. [Array](#arrays)
-10. [Map](#maps)
-11. [String และ f-string](#strings)
-12. [Panic, assert และการทดสอบ](#testing)
-13. [Modules (`import`)](#modules)
-14. [Built-in functions](#builtins)
-15. [Memory model](#memory)
-16. [สิ่งที่ยังไม่รองรับ](#roadmap)
+8. [Enum และ `match`](#enums)
+9. [Optional (`?T`)](#optionals)
+10. [Error handling (`!T` และ `?`)](#errors)
+11. [Closures และ function types](#closures)
+12. [Array](#arrays)
+13. [Map](#maps)
+14. [String และ f-string](#strings)
+15. [Panic, assert และการทดสอบ](#testing)
+16. [Modules (`import`)](#modules)
+17. [Built-in functions](#builtins)
+18. [Memory model](#memory)
+19. [สิ่งที่ยังไม่รองรับ](#roadmap)
 
 ---
 
@@ -93,7 +96,9 @@ name = "x"                // ✗ error: cannot assign twice to immutable variabl
 | `[T]` | array ขยายได้ | `[1, 2, 3]`, `[0; 100]` |
 | `[K: V]` | hash map (เรียงตามลำดับที่ใส่) | `["a": 1]`, `[:]` |
 | `?T` | optional — มีค่า หรือ `nil` | `let x: ?int = nil` |
-| `Name` | struct ที่ประกาศเอง | `Point { x: 1.0, y: 2.0 }` |
+| `!T` | result — ได้ค่า T หรือ error | `fn load() -> !Config` |
+| `fn(A) -> R` | ฟังก์ชัน / closure | `let f: fn(int) -> int = \|x\| x * 2` |
+| `Name` | struct หรือ enum ที่ประกาศเอง | `Point { x: 1.0, y: 2.0 }`, `Shape::Circle(2.0)` |
 
 ชื่อ alias ที่ใช้ได้: `i64`, `Int` = `int` · `f64`, `Float` = `float` · `string`, `String` = `str`
 
@@ -237,7 +242,76 @@ struct Tree { value: int, left: ?Tree, right: ?Tree }
 
 ---
 
-## 8. Optional (`?T`) <a name="optionals"></a>
+## 8. Enum และ `match` <a name="enums"></a>
+
+enum มี variant ที่พกข้อมูลไปด้วยได้ (แบบ Rust) และใส่ method ด้วย `impl` ได้เหมือน struct
+
+```rust
+enum Shape {
+    Circle(float),
+    Rect(float, float),
+    Empty,
+}
+
+impl Shape {
+    fn area(self) -> float {
+        return match self {
+            Shape::Circle(r) => 3.14159 * r * r,
+            Shape::Rect(w, h) => w * h,
+            Shape::Empty => 0.0,
+        }
+    }
+}
+
+let s = Shape::Rect(2, 3)        // variant ที่มีข้อมูล
+let e = Shape::Empty             // variant ที่ไม่มีข้อมูล (ไม่ต้องใส่วงเล็บ)
+println(s, s.area())             // Rect(2.0, 3.0) 6.0
+s == Shape::Rect(2, 3)           // true (เปรียบเทียบตามค่า)
+```
+
+`match` ใช้ได้ทั้งเป็น statement และเป็นค่า:
+
+```rust
+match shape {
+    Shape::Circle(r) if r > 10 => println("big circle"),   // guard ด้วย `if`
+    Circle(r) => println("circle", r),                     // ละชื่อ enum ได้
+    Rect(_, _) | Empty => println("other"),                // `_` ข้ามค่า, `|` หลายแบบ
+}
+
+let label = match code {           // match กับ int / str / bool ได้
+    200 => "ok",
+    404 => "not found",
+    _ => "error",                  // `_` จับทุกกรณีที่เหลือ
+}
+```
+
+pattern ซ้อนกันได้หลายชั้น เช่นแยก result กับ enum ในทีเดียว:
+
+```rust
+match parse(line) {                          // parse() -> !Cmd
+    ok(Cmd::Add(item, n)) => stock[item] = n,
+    ok(Cmd::Remove(item)) => { stock.remove(item) }
+    ok(Cmd::Show) => println(stock),
+    err("empty command") => {},              // literal ข้างใน err(...)
+    err(e) => println("error:", e),
+}
+
+match tree {
+    Node(Leaf(a), Leaf(b)) => a + b,         // ซ้อน enum ตัวเอง
+    Leaf(v) => v,
+    Node(l, r) => sum(l) + sum(r),
+}
+```
+
+- **ต้องครอบคลุมทุกกรณี** — ลืมกรณีไหนจะ error พร้อมบอกชื่อ เช่น `non-exhaustive match: Shape::Empty not covered`
+  หรือแบบซ้อน `ok(Cmd::Show) not covered`
+- ถ้าใช้ `match` เป็นค่า ทุก arm ต้องเป็น expression ชนิดเดียวกัน หรือเป็น block ที่ออกจากฟังก์ชัน/loop
+  (`{ ...; return x }`, `break`, `continue`, `panic(...)`)
+- enum เป็น immutable — ถ้าอยากเปลี่ยน ให้สร้างค่าใหม่
+
+---
+
+## 9. Optional (`?T`) <a name="optionals"></a>
 
 ค่าที่ "อาจไม่มี" ต้องเป็น type `?T` เท่านั้น — ไม่มี null pointer ในภาษา
 
@@ -264,9 +338,94 @@ r == nil
 
 ค่า `T` ใส่ในตำแหน่งที่ต้องการ `?T` ได้เลย (`let x: ?int = 5`)
 
+ในฟังก์ชันที่ return `?U` ใช้ `x?` เพื่อ return `nil` ทันทีถ้า `x` เป็น `nil`:
+
+```rust
+fn double_first_even(xs: [int]) -> ?int {
+    let e = first_even(xs)?      // nil → return nil
+    return e * 2
+}
+```
+
 ---
 
-## 9. Array <a name="arrays"></a>
+## 10. Error handling (`!T` และ `?`) <a name="errors"></a>
+
+ฟังก์ชันที่อาจล้มเหลว return `!T` — ได้ค่า `T` หรือ error ที่มีข้อความ (แนวเดียวกับ `Result` ของ Rust)
+
+```rust
+fn parse_port(s: str) -> !int {
+    let n = parse_int(s) ?? -1
+    if n < 1 || n > 65535 { return err(f"invalid port '{s}'") }
+    return n                         // ค่าปกติ return ได้ตรง ๆ
+}
+
+fn load(line: str) -> !Config {
+    let parts = line.split("=")
+    let port = parse_port(parts[1])? // `?` = ถ้า error ให้ return error นั้นต่อทันที
+    return Config { name: parts[0], port }
+}
+```
+
+การจัดการ error:
+
+```rust
+match load("web=80") {
+    ok(cfg) => println(cfg.port),
+    err(msg) => println("failed:", msg),
+}
+if let cfg = load(line) { ... }      // ทำเมื่อสำเร็จ
+let port = parse_port(s) ?? 8080     // ค่า default เมื่อ error
+r.is_ok()  r.is_err()  r.error()     // error() -> ?str (ข้อความ error)
+r.unwrap()                           // ได้ค่า หรือ panic พร้อมข้อความ error
+r.unwrap_or(0)   r.expect("must have a port")
+```
+
+- ฟังก์ชันที่ไม่มีค่าให้ return แต่อาจล้มเหลว ใช้ `!void` (จบฟังก์ชันปกติ = สำเร็จ)
+- `fn main() -> !void` ได้: ถ้า error หลุดออกจาก `main` จะพิมพ์ `error: <ข้อความ>` และจบด้วย exit code 1
+- ถ้าเรียกฟังก์ชันที่ return `!T` แล้วไม่สนใจผลลัพธ์ คอมไพเลอร์จะเตือน (error จะได้ไม่หายเงียบ ๆ)
+
+---
+
+## 11. Closures และ function types <a name="closures"></a>
+
+```rust
+let double = |x: int| x * 2              // closure
+let add = |a: int, b: int| -> int {      // ระบุ return type + block
+    return a + b
+}
+println(double(4), add(1, 2))            // 8 3
+
+fn apply(f: fn(int) -> int, x: int) -> int { return f(x) }
+apply(double, 5)                         // 10
+apply(|x| x - 1, 5)                      // type ของ x รู้จาก context จึงไม่ต้องระบุ
+apply(square, 5)                         // ส่งชื่อฟังก์ชันเป็นค่าได้
+
+fn make_adder(n: int) -> fn(int) -> int {
+    return |x| x + n                     // closure จับค่า n ไว้
+}
+```
+
+- closure **จับค่าตัวแปรแบบ copy** ณ ตอนสร้าง (เหมือน `move` ของ Rust) — กำหนดค่าใหม่ให้ตัวแปรที่จับมาไม่ได้
+  แต่แก้ไขข้อมูลข้างใน array / map / struct ที่จับมาได้ (ถ้าตัวแปรเดิมเป็น `let mut`)
+- struct เก็บ function ไว้ใน field ได้: `struct Button { on_click: fn(str) -> str }` แล้วเรียก `b.on_click("x")`
+
+method ของ array ที่รับ closure:
+
+```rust
+xs.map(|x| x * 2)            // [T] -> [U]
+xs.filter(|x| x > 3)         // เก็บเฉพาะที่ตรงเงื่อนไข
+xs.any(|x| x > 3)            // มีสักตัวไหม -> bool
+xs.all(|x| x > 0)            // ทุกตัวไหม -> bool
+xs.find(|x| x > 3)           // ตัวแรกที่ตรง -> ?T
+xs.fold(0, |acc, x| acc + x) // สะสมค่า
+xs.sort_by(|a, b| a.age < b.age)   // เรียงแบบ stable ด้วยเงื่อนไข "a มาก่อน b"
+xs.sum()  xs.min()  xs.max()       // min/max -> ?T (nil ถ้า array ว่าง)
+```
+
+---
+
+## 12. Array <a name="arrays"></a>
 
 ```rust
 let mut xs = [5, 3, 8]
@@ -278,6 +437,7 @@ xs.len()          xs.is_empty()      xs.first()           xs.last()
 xs.contains(8)    xs.index_of(8)     xs.sort()            xs.reverse()
 xs.clear()        xs.copy()          xs[1..3]             xs[2..]   xs[..2]
 ["a", "b"].join(", ")
+xs.map(f)  xs.filter(f)  xs.fold(init, f)  xs.sort_by(less)  xs.sum()  xs.min()  xs.max()   // ดูหัวข้อ 11
 ```
 
 - index นอกขอบเขต → panic พร้อมบอก len/index/ตำแหน่ง
@@ -285,7 +445,7 @@ xs.clear()        xs.copy()          xs[1..3]             xs[2..]   xs[..2]
 
 ---
 
-## 10. Map <a name="maps"></a>
+## 13. Map <a name="maps"></a>
 
 ```rust
 let mut ages = ["alice": 30, "bob": 25]
@@ -307,7 +467,7 @@ key ได้แค่ `int`, `str`, `bool` · การวนลูปเรี
 
 ---
 
-## 11. String และ f-string <a name="strings"></a>
+## 14. String และ f-string <a name="strings"></a>
 
 ```rust
 let s = "Hello, World"
@@ -342,7 +502,7 @@ escape: `\n \t \r \\ \" \0 \e \x41 \u{1F600} \{ \}`
 
 ---
 
-## 12. Panic, assert และการทดสอบ <a name="testing"></a>
+## 15. Panic, assert และการทดสอบ <a name="testing"></a>
 
 ```rust
 panic("something went wrong")
@@ -373,7 +533,7 @@ test result: ok. 1 passed; 0 failed; 0 filtered out
 
 ---
 
-## 13. Modules (`import`) <a name="modules"></a>
+## 16. Modules (`import`) <a name="modules"></a>
 
 ```rust
 // utils.ar
@@ -389,7 +549,7 @@ fn main() { println(triple(14)) }
 
 ---
 
-## 14. Built-in functions <a name="builtins"></a>
+## 17. Built-in functions <a name="builtins"></a>
 
 | หมวด | ฟังก์ชัน |
 |------|---------|
@@ -398,7 +558,9 @@ fn main() { println(triple(14)) }
 | ขนาด | `len(x)` (str/array/map) |
 | คณิตศาสตร์ | `abs`, `min`, `max`, `sqrt`, `pow`, `floor`, `ceil`, `round`, `sin`, `cos`, `tan`, `atan2`, `exp`, `log`, `log10`, `ipow(int, int)` |
 | ข้อความ | `chr(code)`, `ord(s)` |
-| ไฟล์ / ระบบ | `read_line() -> ?str`, `read_file(path) -> ?str`, `write_file(path, s) -> bool`, `append_file`, `file_exists`, `args() -> [str]`, `getenv(name) -> ?str`, `run(cmd) -> int` |
+| ไฟล์ / ระบบ | `read_line() -> ?str`, `read_file(path) -> ?str`, `write_file(path, s) -> bool`, `append_file`, `file_exists`, `list_dir(path) -> ![str]`, `make_dir(path) -> !void`, `remove_file(path) -> !void`, `args() -> [str]`, `getenv(name) -> ?str` |
+| รันโปรแกรม | `exec(program, args: [str]) -> int` (แนะนำ: ไม่ผ่าน shell จึงปลอดภัย), `run(cmd) -> int` (ผ่าน shell — อย่าใส่ข้อมูลจากภายนอกลงไป) |
+| error | `err(message) -> !T`, `ok(value)` |
 | เวลา | `time_ns()`, `time_ms()`, `unix_time()`, `sleep_ms(ms)` |
 | สุ่ม | `rand_int(lo, hi)`, `rand_float()`, `seed(n)` |
 | ควบคุม | `panic(msg)`, `assert(c)`, `assert_eq(a, b)`, `exit(code)` |
@@ -407,20 +569,20 @@ fn main() { println(triple(14)) }
 
 ---
 
-## 15. Memory model <a name="memory"></a>
+## 18. Memory model <a name="memory"></a>
 
 - `int`, `float`, `bool` เป็น value type (copy เมื่อกำหนดค่า)
 - `str` เป็น immutable — แชร์ได้อย่างปลอดภัย
-- array, map, struct เป็น reference type — ส่งเข้าฟังก์ชันไม่ copy (ถ้าต้องการสำเนาใช้ `.copy()`)
+- array, map, struct, enum และ closure เป็น reference type — ส่งเข้าฟังก์ชันไม่ copy (ถ้าต้องการสำเนาใช้ `.copy()`)
 - หน่วยความจำคืนอัตโนมัติด้วย precise mark & sweep GC (size-class allocator) ไม่มี `malloc`/`free`
 - ทดสอบ GC แบบเข้มได้ด้วย `ARC_GC_STRESS=1 arc run file.ar` (เก็บขยะทุกครั้งที่ allocate)
 
 ---
 
-## 16. สิ่งที่ยังไม่รองรับ <a name="roadmap"></a>
+## 19. สิ่งที่ยังไม่รองรับ <a name="roadmap"></a>
 
-แผนถัดไป: `enum` + `match`, generics, closures/lambda, `Result`-style error handling,
-module namespaces, concurrency (threads/channels), FFI กับ C, และ GUI/Metal bindings ของเดิม
+แผนถัดไป: generics ที่ผู้ใช้ประกาศเอง, interface/trait, module namespaces, concurrency (threads/channels),
+network (TCP/HTTP), FFI กับ C, LSP สำหรับ editor, GC แบบ incremental (ลดเวลาหยุด) และ GUI/Metal bindings ของเดิม
 (`VStack`, `Button`, `extern fn`, `GLOBAL(...)`, `malloc/peek/poke` ของคอมไพเลอร์รุ่นเก่ายังไม่ถูกย้ายมา)
 
 ---

@@ -11,6 +11,7 @@ namespace arc {
 static const std::set<std::string> kKeywords = {
     "fn", "let", "mut", "var", "if", "elif", "else", "while", "for", "in", "loop",
     "break", "continue", "return", "struct", "impl", "true", "false", "nil", "import", "as",
+    "enum", "match",
 };
 
 bool isKeyword(const std::string& s) { return kKeywords.count(s) > 0; }

@@ -33,6 +33,20 @@ private:
     std::map<FnDecl*, std::set<FnDecl*>> fnCalls_;
     std::map<Node*, std::set<Var*>> globalDeps_;
     std::map<Node*, std::set<FnDecl*>> globalCalls_;
+    struct LambdaCtx { FnDecl* fn; size_t scopeBase; };
+    std::vector<LambdaCtx> lambdas_;  // closures being checked, outermost first
+    Var* captureInto(FnDecl* L, Var* outer);
+    Type* checkLambda(Node* n, Type* expected);
+    Type* checkFnArg(Node*& arg, const std::vector<Type*>& params, Type* ret);
+    void checkValueArgs(Node* n, size_t firstArg, Type* ft);
+    Type* checkTry(Node* n);
+    Type* checkPath(Node* n);
+    Type* checkMatch(Node* m, Type* expected);
+    bool needsReturn(Type* ret);
+    bool diverges(Node* b);
+    void checkPattern(Node* p, Type* t, bool multi);
+    std::vector<std::string> missingPatterns(const std::vector<Node*>& rows, Type* t);
+    bool patternError_ = false;
     void noteGlobalUse(Var* v);
     void noteCall(FnDecl* callee);
     void orderGlobals();

@@ -75,6 +75,7 @@ void Parser::enter(const Loc& at) {
 
 void Parser::endStmt() {
     if (acceptP(";")) { while (acceptP(";")) {} return; }
+    if (armStmt_ && isP(",")) return;
     if (isP("}") || cur().kind == Tok::Eof || cur().nl) return;
     Loc at = prevEnd();
     at.off += at.len; at.col += at.len; at.len = 1;
@@ -126,6 +127,7 @@ void Parser::parseItem(std::vector<ImportReq>& imports) {
         return;
     }
     if (isKw("struct")) { parseStruct(); return; }
+    if (isKw("enum")) { parseEnum(); return; }
     if (isKw("impl")) { parseImpl(); return; }
     if (isKw("let") || isKw("var")) {
         Node* n = parseLet(true);
@@ -134,8 +136,8 @@ void Parser::parseItem(std::vector<ImportReq>& imports) {
     }
     if (isIdent() && cur().text == "extern")
         fail(cur().loc, "`extern` declarations are not supported by this compiler yet", "", "");
-    if (isIdent() && (cur().text == "class" || cur().text == "enum" || cur().text == "match"))
-        fail(cur().loc, "`" + cur().text + "` is not supported yet", "", cur().text == "class" ? "use `struct` with an `impl` block" : "");
+    if (isIdent() && cur().text == "class")
+        fail(cur().loc, "`class` is not supported", "", "use `struct` with an `impl` block");
     fail(cur().loc, "expected an item (fn, struct, impl, let, import), found " + describe(cur()),
          "statements are not allowed at the top level",
          "move this code into `fn main() { ... }`");
@@ -223,6 +225,41 @@ void Parser::parseStruct() {
     prog_.structs.push_back(sd);
 }
 
+void Parser::parseEnum() {
+    next();  // enum
+    Token name = expectIdent("enum name");
+    StructDecl* sd = new StructDecl();
+    sd->name = name.text;
+    sd->loc = name.loc;
+    sd->isEnum = true;
+    acceptP(":");
+    expectP("{", "to start the enum body");
+    nest_++;
+    while (!isP("}")) {
+        if (acceptP(",") || acceptP(";")) continue;
+        Token vname = expectIdent("variant name");
+        Variant v;
+        v.name = vname.text;
+        v.loc = vname.loc;
+        if (acceptP("(")) {
+            while (!isP(")")) {
+                if (!v.tes.empty()) expectP(",", "between payload types");
+                if (isP(")")) break;
+                v.tes.push_back(parseType());
+            }
+            expectP(")", "to close the payload types");
+        } else if (isP("{")) {
+            fail(cur().loc, "variants with named fields are not supported", "", "use positional payloads: `" + v.name + "(int, str)`");
+        }
+        if (sd->variantIndex(v.name) >= 0) fail(vname.loc, "variant `" + v.name + "` is declared more than once");
+        sd->variants.push_back(v);
+    }
+    nest_--;
+    expectP("}", "to close the enum");
+    if (sd->variants.empty()) fail(name.loc, "enum `" + sd->name + "` has no variants");
+    prog_.structs.push_back(sd);
+}
+
 void Parser::parseImpl() {
     Token kw = next();  // impl
     Token name = expectIdent("type name after `impl`");
@@ -247,6 +284,33 @@ void Parser::parseImpl() {
 TypeExpr* Parser::parseType() {
     TypeExpr* t = new TypeExpr();
     t->loc = cur().loc;
+    if (acceptP("!")) {
+        t->kind = TypeExpr::Result;
+        if (isIdent() && cur().text == "void") {
+            TypeExpr* v = new TypeExpr();
+            v->loc = cur().loc;
+            v->name = next().text;
+            t->a = v;
+        } else {
+            t->a = parseType();
+        }
+        t->loc = span(t->loc, prevEnd());
+        return t;
+    }
+    if (isKw("fn")) {
+        next();
+        t->kind = TypeExpr::Func;
+        expectP("(", "after `fn` in a function type");
+        while (!isP(")")) {
+            if (!t->params.empty()) expectP(",", "between parameter types");
+            if (isP(")")) break;
+            t->params.push_back(parseType());
+        }
+        expectP(")", "to close the parameter types");
+        if (acceptP("->")) t->b = parseType();
+        t->loc = span(t->loc, prevEnd());
+        return t;
+    }
     if (acceptP("?")) {
         t->kind = TypeExpr::Optional;
         t->a = parseType();
@@ -272,7 +336,7 @@ TypeExpr* Parser::parseType() {
         t->name = next().text;
         return t;
     }
-    unexpected("a type", "types look like `int`, `float`, `bool`, `str`, `[int]`, `[str: int]`, `?int` or a struct name");
+    unexpected("a type", "types look like `int`, `float`, `bool`, `str`, `[int]`, `[str: int]`, `?int`, `!int`, `fn(int) -> int` or a struct/enum name");
 }
 
 // ------------------------------------------------------------- statements --
@@ -303,6 +367,7 @@ static const std::set<std::string> kAssignOps = {"=", "+=", "-=", "*=", "/=", "%
 Node* Parser::parseStmt() {
     if (isKw("let") || isKw("var")) return parseLet(false);
     if (isKw("if")) return parseIf();
+    if (isKw("match")) return parseMatch(false);
     if (isKw("while")) return parseWhile();
     if (isKw("for")) return parseFor();
     if (isKw("loop")) {
@@ -620,11 +685,16 @@ Node* Parser::parsePostfix() {
         bool sameLine = nest_ > 0 || !cur().nl;
         if (isP("(") && sameLine) {
             Token lp = next();
-            if (e->kind != NK::Ident)
-                fail(lp.loc, "only named functions can be called", "", "closures are not supported yet");
             Node* c = new Node(NK::Call, e->loc);
-            c->str = e->str;
-            c->kids = parseArgs();
+            if (e->kind == NK::Ident) {
+                c->str = e->str;
+                c->kids = parseArgs();
+            } else {  // calling the value of an expression, e.g. make_adder(1)(2)
+                c->isConst = true;
+                c->kids.push_back(e);
+                for (Node* a : parseArgs()) c->kids.push_back(a);
+            }
+            (void)lp;
             c->loc = span(e->loc, prevEnd());
             e = c;
             continue;
@@ -652,6 +722,13 @@ Node* Parser::parsePostfix() {
             n->flag = incl;
             (void)lb;
             e = n;
+            continue;
+        }
+        if (isP("?") && sameLine) {
+            Token q = next();
+            Node* t = new Node(NK::Try, span(e->loc, q.loc));
+            t->kids.push_back(e);
+            e = t;
             continue;
         }
         if (isP(".")) {
@@ -720,15 +797,21 @@ Node* Parser::parsePrimary() {
             next();
             return n;
         }
+        if (t.text == "match") return parseMatch(true);
         if (t.text == "if")
-            fail(t.loc, "`if` cannot be used as an expression yet", "", "assign in each branch instead");
+            fail(t.loc, "`if` cannot be used as an expression yet", "", "assign in each branch, or use `match`");
         unexpected("an expression");
     case Tok::Ident: {
         Token name = next();
         if (isP("::")) {
             next();
-            Token fn = expectIdent("function name after `::`");
-            if (!isP("(")) unexpected("`(` to call `" + name.text + "::" + fn.text + "`");
+            Token fn = expectIdent("function or variant name after `::`");
+            if (!isP("(") || (cur().nl && nest_ == 0)) {
+                Node* p = new Node(NK::Path, span(name.loc, fn.loc));
+                p->names.push_back(name.text);
+                p->str = fn.text;
+                return p;
+            }
             next();
             Node* c = new Node(NK::PathCall, span(name.loc, fn.loc));
             c->names.push_back(name.text);
@@ -757,7 +840,7 @@ Node* Parser::parsePrimary() {
             return e;
         }
         if (t.text == "[") return parseBracketLit();
-        if (t.text == "|") fail(t.loc, "closures are not supported yet");
+        if (t.text == "|" || t.text == "||") return parseLambda();
         unexpected("an expression");
     case Tok::Eof:
         unexpected("an expression");
@@ -835,6 +918,139 @@ Node* Parser::parseStructLit(const Token& name) {
     next();  // }
     n->loc = span(name.loc, prevEnd());
     return n;
+}
+
+// match <expr> { <pat> [| <pat>]* [if <guard>] => <body> , ... }
+// As a statement an arm body is a block or a statement; as an expression it is
+// an expression.
+Node* Parser::parseMatch(bool asExpr) {
+    Token kw = next();  // match
+    Node* m = new Node(NK::Match, kw.loc);
+    m->flag = asExpr;
+    bool savedNS = noStruct_;
+    noStruct_ = true;
+    m->kids.push_back(parseExpr());
+    noStruct_ = savedNS;
+    Token lb = expectP("{", "to start the match arms");
+    int savedNest = nest_;
+    nest_ = 0;
+    while (!isP("}")) {
+        if (cur().kind == Tok::Eof) fail(lb.loc, "unclosed `match`: this `{` has no matching `}`");
+        if (acceptP(",") || acceptP(";")) continue;
+        Node* arm = new Node(NK::MatchArm, cur().loc);
+        arm->pats.push_back(parsePattern());
+        while (acceptP("|")) arm->pats.push_back(parsePattern());
+        Node* guard = nullptr;
+        if (isKw("if")) {
+            next();
+            bool s2 = noStruct_;
+            noStruct_ = true;
+            guard = parseExpr();
+            noStruct_ = s2;
+        }
+        expectP("=>", "after the match pattern");
+        Node* body;
+        if (asExpr && !isP("{")) {
+            nest_++;
+            body = parseExpr();
+            nest_--;
+        } else if (isP("{")) {  // as a value, a block arm must leave (return/break/continue/panic)
+            body = parseBlock();
+        } else {
+            bool savedArm = armStmt_;
+            armStmt_ = true;
+            body = parseStmt();
+            armStmt_ = savedArm;
+        }
+        arm->kids = {body, guard};
+        m->pats.push_back(arm);
+        if (!isP("}") && !acceptP(",") && !cur().nl && !(m->pats.back()->kids[0]->kind == NK::Block))
+            unexpected("`,` or a new line between match arms");
+    }
+    next();  // }
+    nest_ = savedNest;
+    if (m->pats.empty()) fail(kw.loc, "`match` has no arms");
+    return m;
+}
+
+// pattern := `_` | literal | name | [Enum::]Variant [`(` pattern, ... `)`] | ok(pattern) | err(pattern)
+// Sub-patterns nest to any depth. A bare name is resolved by the checker:
+// a unit variant of the matched enum, otherwise a new binding.
+Node* Parser::parsePattern() {
+    enter(cur().loc);
+    Node* p = new Node(NK::Pat, cur().loc);
+    if (isIdent() && cur().text == "_") {
+        next();
+        p->str = "_";
+        leave();
+        return p;
+    }
+    if (cur().kind == Tok::Int || cur().kind == Tok::Str || isKw("true") || isKw("false") || isP("-")) {
+        p->str = "lit";
+        Node* lit = parseUnary();
+        if (lit->kind != NK::IntLit && lit->kind != NK::StrLit && lit->kind != NK::BoolLit && lit->kind != NK::FloatLit)
+            fail(lit->loc, "patterns can only be literals, `_`, names or enum variants");
+        p->kids.push_back(lit);
+        p->loc = lit->loc;
+        leave();
+        return p;
+    }
+    if (isKw("nil")) fail(cur().loc, "`nil` patterns are not supported", "", "use `if let v = x { } else { }`");
+    Token first = expectIdent("a pattern (a literal, `_`, a name or an enum variant)");
+    std::string enumName, variant = first.text;
+    if (acceptP("::")) {
+        enumName = first.text;
+        variant = expectIdent("variant name after `::`").text;
+    }
+    p->names = {enumName, variant};
+    p->nameLocs.push_back(first.loc);
+    if (acceptP("(")) {
+        while (!isP(")")) {
+            if (!p->kids.empty()) expectP(",", "between sub-patterns");
+            if (isP(")")) break;
+            p->kids.push_back(parsePattern());
+        }
+        expectP(")", "to close the pattern");
+        p->flag = true;  // written with a payload list
+    }
+    p->str = enumName.empty() && !p->flag ? "ident" : "variant";
+    if (enumName.empty() && p->flag && (variant == "ok" || variant == "err")) p->str = variant;
+    p->loc = span(first.loc, prevEnd());
+    leave();
+    return p;
+}
+
+// |a, b| expr   |a: int| -> int { ... }   || expr
+Node* Parser::parseLambda() {
+    Token open = next();
+    Node* l = new Node(NK::Lambda, open.loc);
+    if (open.text == "|") {
+        while (!isP("|")) {
+            if (!l->names.empty()) expectP(",", "between closure parameters");
+            Token pn = expectIdent("closure parameter name");
+            l->names.push_back(pn.text);
+            l->nameLocs.push_back(pn.loc);
+            l->tyExprs.push_back(acceptP(":") ? parseType() : nullptr);
+        }
+        next();  // closing |
+    }
+    if (acceptP("->")) {
+        l->tyExpr = parseType();
+        if (!isP("{")) unexpected("`{` to start the closure body (required after `-> Type`)");
+    }
+    if (isP("{")) {
+        l->kids.push_back(parseBlock());
+    } else {
+        Node* e = parseExpr();
+        Node* ret = new Node(NK::Return, e->loc);
+        ret->kids.push_back(e);
+        ret->flag = true;  // implicit return of an expression body
+        Node* b = new Node(NK::Block, e->loc);
+        b->kids.push_back(ret);
+        l->kids.push_back(b);
+    }
+    l->loc = span(open.loc, prevEnd());
+    return l;
 }
 
 // Decodes escapes in a literal f-string segment (raw text from the file).

@@ -117,8 +117,17 @@ std::string Type::str() const {
     case TK::Nil: return "nil";
     case TK::Array: return "[" + elem->str() + "]";
     case TK::Map: return "[" + key->str() + ": " + elem->str() + "]";
-    case TK::Struct: return sd ? sd->name : "struct";
+    case TK::Struct: case TK::Enum: return sd ? sd->name : "struct";
     case TK::Optional: return "?" + elem->str();
+    case TK::Result: return "!" + elem->str();
+    case TK::ErrVal: return "error";
+    case TK::Func: {
+        std::string r = "fn(";
+        for (size_t i = 0; i < params.size(); i++) r += (i ? ", " : "") + params[i]->str();
+        r += ")";
+        if (elem && elem->kind != TK::Void) r += " -> " + elem->str();
+        return r;
+    }
     }
     return "?";
 }
@@ -143,6 +152,7 @@ Types::Types() {
     boolT = make(TK::Bool);
     strT = make(TK::Str);
     nilT = make(TK::Nil);
+    errValT = make(TK::ErrVal);
 }
 
 Type* Types::array(Type* elem) {
@@ -177,6 +187,32 @@ Type* Types::optional(Type* inner) {
 Type* Types::structT(StructDecl* sd) {
     Type* t = make(TK::Struct);
     t->sd = sd;
+    return t;
+}
+
+Type* Types::enumT(StructDecl* sd) {
+    Type* t = make(TK::Enum);
+    t->sd = sd;
+    return t;
+}
+
+Type* Types::result(Type* inner) {
+    auto it = results_.find(inner);
+    if (it != results_.end()) return it->second;
+    Type* t = make(TK::Result);
+    t->elem = inner;
+    results_[inner] = t;
+    return t;
+}
+
+Type* Types::func(const std::vector<Type*>& params, Type* ret) {
+    auto k = std::make_pair(params, ret);
+    auto it = funcs_.find(k);
+    if (it != funcs_.end()) return it->second;
+    Type* t = make(TK::Func);
+    t->params = params;
+    t->elem = ret;
+    funcs_[k] = t;
     return t;
 }
 

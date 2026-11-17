@@ -1,2 +1,2 @@
-// ERROR: `if let` requires an optional value, found `int`
+// ERROR: `if let` requires an optional (`?T`) or result (`!T`) value, found `int`
 fn main() { if let x = 5 { println(x) } }

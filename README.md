@@ -30,8 +30,18 @@ fn main() {
 - **Native speed.** Arc compiles to C and then to machine code with clang
   (`-O2` for `run`, `-O3` for `build`), on par with Rust and Go (see below).
 - **Static types with inference.** `int`, `float`, `bool`, `str`, arrays `[T]`,
-  hash maps `[K: V]`, optionals `?T`, and structs with `impl` methods. There are
-  no implicit conversions and no null.
+  hash maps `[K: V]`, optionals `?T`, structs and enums with `impl` methods, and
+  function types. There are no implicit conversions and no null.
+- **Enums and pattern matching.** Variants carry data (`Shape::Circle(2.0)`).
+  `match` checks that every case is handled and supports guards. It works on
+  enums, results, ints, strings and bools, and can be used as a value.
+- **Errors as values.** A fallible function returns `!T` and fails with
+  `err("...")`. `?` passes the error to the caller, and `ok(v)`/`err(e)`
+  patterns, `??` and `unwrap` handle it. `fn main() -> !void` reports an
+  escaped error and exits with 1.
+- **Closures.** `|x| x * 2` infers its types from context and captures by value.
+  Named functions are values too. Arrays have `map`, `filter`, `fold`, `any`,
+  `all`, `find`, `sort_by`, `sum`, `min` and `max`.
 - **Safe by default.** Bindings are immutable unless declared `let mut`. Arrays
   are bounds-checked, integer division by zero is caught, and unbounded
   recursion is reported as a stack overflow instead of a crash.
@@ -151,10 +161,15 @@ binaries have no dependencies beyond libc.
 
 ## Status and roadmap
 
-Implemented: everything in the language reference. Planned next: `enum` + `match`,
-generics, closures, `Result`-style error handling, module namespaces,
-concurrency, C FFI, and porting the Cocoa/Metal UI bindings from the previous
-toolchain.
+Implemented: everything in the language reference. Planned next:
+- user-defined generics, and interfaces or traits
+- module namespaces
+- concurrency
+- networking (TCP/HTTP)
+- C FFI
+- an LSP server for editors
+- an incremental GC
+- porting the Cocoa/Metal UI bindings from the previous toolchain
 
 The earlier prototype toolchains are kept for reference: the OCaml/LLVM compiler
 in `lib/` and `bin/`, the Titan bytecode VM (`make legacy-vm`), and the old

@@ -1,41 +1,23 @@
 // A tiny calculator language, written 100% in Arc:
 // tokenizer -> recursive-descent parser -> tree-walking evaluator,
 // with variables, functions and error messages that point at the problem.
+// Tokens and the syntax tree are enums, errors travel as `!T` with `?`.
 
-struct Token {
-    kind: str,      // "num", "ident", "op", "end"
-    text: str,
-    num: float,
-    pos: int,
+enum Token {
+    Num(float),
+    Name(str),
+    Op(str),
+    End,
 }
 
-struct Expr {
-    kind: str,      // "num", "var", "neg", "bin", "call"
-    num: float,
-    name: str,      // variable / function name, or the operator
-    left: ?Expr,
-    right: ?Expr,
-    args: [Expr],
-}
+struct Tok { token: Token, pos: int }
 
-fn num_expr(v: float) -> Expr {
-    return Expr { kind: "num", num: v, name: "", left: nil, right: nil, args: [] }
-}
-
-fn var_expr(name: str) -> Expr {
-    return Expr { kind: "var", num: 0, name, left: nil, right: nil, args: [] }
-}
-
-fn neg_expr(e: Expr) -> Expr {
-    return Expr { kind: "neg", num: 0, name: "-", left: e, right: nil, args: [] }
-}
-
-fn bin_expr(op: str, l: Expr, r: Expr) -> Expr {
-    return Expr { kind: "bin", num: 0, name: op, left: l, right: r, args: [] }
-}
-
-fn call_expr(name: str, args: [Expr]) -> Expr {
-    return Expr { kind: "call", num: 0, name, left: nil, right: nil, args }
+enum Expr {
+    Num(float),
+    Var(str),
+    Neg(Expr),
+    Bin(str, Expr, Expr),
+    Call(str, [Expr]),
 }
 
 // ------------------------------------------------------------- tokenizer --
@@ -43,43 +25,50 @@ fn call_expr(name: str, args: [Expr]) -> Expr {
 fn is_digit(c: str) -> bool { return c >= "0" && c <= "9" }
 fn is_alpha(c: str) -> bool { return (c >= "a" && c <= "z") || (c >= "A" && c <= "Z") || c == "_" }
 
-struct Lexed { tokens: [Token], error: str, error_pos: int }
+struct Lexer { chars: [str], error_pos: int }
 
-fn tokenize(src: str) -> Lexed {
-    let cs = src.chars()
-    let mut toks: [Token] = []
-    let mut i = 0
-    while i < cs.len() {
-        let c = cs[i]
-        if c == " " { i += 1; continue }
-        let start = i
-        if is_digit(c) || c == "." {
-            let mut text = ""
-            while i < cs.len() && (is_digit(cs[i]) || cs[i] == ".") {
-                text += cs[i]
-                i += 1
-            }
-            if let v = parse_float(text) {
-                toks.push(Token { kind: "num", text, num: v, pos: start })
-            } else {
-                return Lexed { tokens: toks, error: f"bad number '{text}'", error_pos: start }
-            }
-        } elif is_alpha(c) {
-            let mut text = ""
-            while i < cs.len() && (is_alpha(cs[i]) || is_digit(cs[i])) {
-                text += cs[i]
-                i += 1
-            }
-            toks.push(Token { kind: "ident", text, num: 0, pos: start })
-        } elif "+-*/%^()=,".contains(c) {
-            toks.push(Token { kind: "op", text: c, num: 0, pos: start })
-            i += 1
-        } else {
-            return Lexed { tokens: toks, error: f"unexpected character '{c}'", error_pos: start }
-        }
+impl Lexer {
+    fn take_while(self, start: int, pred: fn(str) -> bool) -> int {
+        let mut i = start
+        while i < self.chars.len() && pred(self.chars[i]) { i += 1 }
+        return i
     }
-    toks.push(Token { kind: "end", text: "end of input", num: 0, pos: cs.len() })
-    return Lexed { tokens: toks, error: "", error_pos: -1 }
+
+    fn tokenize(mut self) -> ![Tok] {
+        let cs = self.chars
+        let mut toks: [Tok] = []
+        let mut i = 0
+        while i < cs.len() {
+            let c = cs[i]
+            if c == " " {
+                i += 1
+                continue
+            }
+            if is_digit(c) || c == "." {
+                let end = self.take_while(i, |ch| is_digit(ch) || ch == ".")
+                let text = cs[i..end].join("")
+                if let v = parse_float(text) {
+                    toks.push(Tok { token: Token::Num(v), pos: i })
+                } else {
+                    self.error_pos = i
+                    return err(f"bad number '{text}'")
+                }
+                i = end
+            } elif is_alpha(c) {
+                let end = self.take_while(i, |ch| is_alpha(ch) || is_digit(ch))
+                toks.push(Tok { token: Token::Name(cs[i..end].join("")), pos: i })
+                i = end
+            } elif "+-*/%^()=,".contains(c) {
+                toks.push(Tok { token: Token::Op(c), pos: i })
+                i += 1
+            } else {
+                self.error_pos = i
+                return err(f"unexpected character '{c}'")
+            }
+        }
+        toks.push(Tok { token: Token::End, pos: cs.len() })
+        return toks
+    }
 }
 
 // ---------------------------------------------------------------- parser --
@@ -89,174 +78,160 @@ fn tokenize(src: str) -> Lexed {
 //   power := primary ("^" unary)?          (right associative)
 //   primary := number | name | name "(" args ")" | "(" expr ")"
 
-struct Parser { toks: [Token], pos: int, error: str, error_pos: int }
+struct Parser { toks: [Tok], pos: int, error_pos: int }
+
+fn describe(t: Token) -> str {
+    return match t {
+        Token::Num(v) => str(v),
+        Token::Name(n) => n,
+        Token::Op(o) => o,
+        Token::End => "end of input",
+    }
+}
 
 impl Parser {
-    fn peek(self) -> Token { return self.toks[self.pos] }
+    fn peek(self) -> Tok { return self.toks[self.pos] }
 
-    fn advance(mut self) -> Token {
+    fn advance(mut self) -> Tok {
         let t = self.toks[self.pos]
-        if t.kind != "end" { self.pos += 1 }
+        if t.token != Token::End { self.pos += 1 }
         return t
     }
 
     fn at_op(self, op: str) -> bool {
-        let t = self.peek()
-        return t.kind == "op" && t.text == op
+        return self.peek().token == Token::Op(op)
     }
 
-    fn fail(mut self, msg: str) -> ?Expr {
-        if self.error.is_empty() {
-            self.error = msg
-            self.error_pos = self.peek().pos
-        }
-        return nil
+    fn fail(mut self, msg: str) -> !Expr {
+        self.error_pos = self.peek().pos
+        return err(msg)
     }
 
-    fn expr(mut self) -> ?Expr {
-        let first = self.term()
-        if first == nil { return nil }
-        let mut left = first.unwrap()
+    fn expr(mut self) -> !Expr {
+        let mut left = self.term()?
         while self.at_op("+") || self.at_op("-") {
-            let op = self.advance().text
-            if let right = self.term() { left = bin_expr(op, left, right) } else { return nil }
+            let op = describe(self.advance().token)
+            left = Expr::Bin(op, left, self.term()?)
         }
         return left
     }
 
-    fn term(mut self) -> ?Expr {
-        let first = self.unary()
-        if first == nil { return nil }
-        let mut left = first.unwrap()
+    fn term(mut self) -> !Expr {
+        let mut left = self.unary()?
         while self.at_op("*") || self.at_op("/") || self.at_op("%") {
-            let op = self.advance().text
-            if let right = self.unary() { left = bin_expr(op, left, right) } else { return nil }
+            let op = describe(self.advance().token)
+            left = Expr::Bin(op, left, self.unary()?)
         }
         return left
     }
 
-    fn unary(mut self) -> ?Expr {
+    fn unary(mut self) -> !Expr {
         if self.at_op("-") {
             self.advance()
-            if let inner = self.unary() { return neg_expr(inner) }
-            return nil
+            return Expr::Neg(self.unary()?)
         }
         return self.power()
     }
 
-    fn power(mut self) -> ?Expr {
-        let base = self.primary()
-        if base == nil { return nil }
+    fn power(mut self) -> !Expr {
+        let base = self.primary()?
         if self.at_op("^") {
             self.advance()
-            if let exp = self.unary() { return bin_expr("^", base.unwrap(), exp) }
-            return nil
+            return Expr::Bin("^", base, self.unary()?)
         }
         return base
     }
 
-    fn primary(mut self) -> ?Expr {
+    fn primary(mut self) -> !Expr {
         let t = self.peek()
-        if t.kind == "num" {
-            self.advance()
-            return num_expr(t.num)
-        }
-        if t.kind == "ident" {
-            self.advance()
-            if !self.at_op("(") { return var_expr(t.text) }
-            self.advance()
-            let mut args: [Expr] = []
-            if !self.at_op(")") {
-                loop {
-                    if let a = self.expr() { args.push(a) } else { return nil }
-                    if self.at_op(",") { self.advance() } else { break }
-                }
+        match t.token {
+            Token::Num(v) => {
+                self.advance()
+                return Expr::Num(v)
             }
-            if !self.at_op(")") { return self.fail("expected ')' after the arguments") }
-            self.advance()
-            return call_expr(t.text, args)
+            Token::Name(name) => {
+                self.advance()
+                if !self.at_op("(") { return Expr::Var(name) }
+                self.advance()
+                let mut args: [Expr] = []
+                if !self.at_op(")") {
+                    loop {
+                        args.push(self.expr()?)
+                        if self.at_op(",") { self.advance() } else { break }
+                    }
+                }
+                if !self.at_op(")") { return self.fail("expected ')' after the arguments") }
+                self.advance()
+                return Expr::Call(name, args)
+            }
+            _ => {
+                if self.at_op("(") {
+                    self.advance()
+                    let inner = self.expr()?
+                    if !self.at_op(")") { return self.fail("expected ')'") }
+                    self.advance()
+                    return inner
+                }
+                return self.fail(f"expected a number, a name or '(', found '{describe(t.token)}'")
+            }
         }
-        if self.at_op("(") {
-            self.advance()
-            let inner = self.expr()
-            if inner == nil { return nil }
-            if !self.at_op(")") { return self.fail("expected ')'") }
-            self.advance()
-            return inner
-        }
-        return self.fail(f"expected a number, a name or '(', found '{t.text}'")
     }
 }
 
 // ------------------------------------------------------------- evaluator --
 
-struct Env { vars: [str: float], error: str }
+struct Env { vars: [str: float] }
+
+fn plural(n: int) -> str {
+    return match n { 1 => "", _ => "s" }
+}
 
 impl Env {
-    fn eval(mut self, e: Expr) -> ?float {
-        if e.kind == "num" { return e.num }
-        if e.kind == "var" {
-            if let v = self.vars.get(e.name) { return v }
-            self.error = f"unknown variable '{e.name}'"
-            return nil
-        }
-        if e.kind == "neg" {
-            if let v = self.eval(e.left.unwrap()) { return -v }
-            return nil
-        }
-        if e.kind == "call" {
-            let mut vals: [float] = []
-            for a in e.args {
-                if let v = self.eval(a) { vals.push(v) } else { return nil }
+    fn eval(self, e: Expr) -> !float {
+        match e {
+            Expr::Num(v) => return v,
+            Expr::Var(name) => {
+                if let v = self.vars.get(name) { return v }
+                return err(f"unknown variable '{name}'")
             }
-            return self.call(e.name, vals)
-        }
-        let l = self.eval(e.left.unwrap())
-        if l == nil { return nil }
-        let r = self.eval(e.right.unwrap())
-        if r == nil { return nil }
-        let a = l.unwrap()
-        let b = r.unwrap()
-        if e.name == "+" { return a + b }
-        if e.name == "-" { return a - b }
-        if e.name == "*" { return a * b }
-        if e.name == "^" { return pow(a, b) }
-        if b == 0 {
-            self.error = "division by zero"
-            return nil
-        }
-        if e.name == "/" { return a / b }
-        return a % b
-    }
-
-    fn call(mut self, name: str, args: [float]) -> ?float {
-        let n = args.len()
-        if name == "sqrt" && n == 1 {
-            if args[0] < 0 {
-                self.error = "sqrt of a negative number"
-                return nil
+            Expr::Neg(inner) => return -self.eval(inner)?,
+            Expr::Bin(op, l, r) => {
+                let a = self.eval(l)?
+                let b = self.eval(r)?
+                return match op {
+                    "+" => ok(a + b),
+                    "-" => ok(a - b),
+                    "*" => ok(a * b),
+                    "^" => ok(pow(a, b)),
+                    _ => divide(op, a, b),
+                }
             }
-            return sqrt(args[0])
-        }
-        if name == "abs" && n == 1 { return abs(args[0]) }
-        if (name == "max" || name == "min" || name == "avg") && n > 0 {
-            let mut acc = args[0]
-            let mut sum = 0.0
-            for v in args {
-                sum += v
-                if name == "max" { acc = max(acc, v) } elif name == "min" { acc = min(acc, v) }
+            Expr::Call(name, args) => {
+                let mut vals: [float] = []
+                for a in args { vals.push(self.eval(a)?) }
+                return call(name, vals)
             }
-            if name == "avg" { return sum / float(n) }
-            return acc
         }
-        self.error = f"unknown function {name}() with {n} argument" + (if_plural(n))
-        return nil
     }
 }
 
-fn if_plural(n: int) -> str {
-    if n == 1 { return "" }
-    return "s"
+fn divide(op: str, a: float, b: float) -> !float {
+    if b == 0 { return err("division by zero") }
+    if op == "/" { return a / b }
+    return a % b
+}
+
+fn call(name: str, args: [float]) -> !float {
+    let n = args.len()
+    if name == "sqrt" && n == 1 {
+        if args[0] < 0 { return err("sqrt of a negative number") }
+        return sqrt(args[0])
+    }
+    if name == "abs" && n == 1 { return abs(args[0]) }
+    if name == "max" && n > 0 { return args.max().unwrap() }
+    if name == "min" && n > 0 { return args.min().unwrap() }
+    if name == "avg" && n > 0 { return args.sum() / float(n) }
+    return err(f"unknown function {name}() with {n} argument{plural(n)}")
 }
 
 // ------------------------------------------------------------------ REPL --
@@ -275,49 +250,58 @@ fn show_error(line: str, pos: int, msg: str) {
     println(f"  {" ".repeat(pos)}^ {msg}")
 }
 
+// Runs one line; `!void` errors carry the message, positions are kept aside.
 fn run_line(mut env: Env, line: str) -> bool {
-    let lx = tokenize(line)
-    if !lx.error.is_empty() {
-        show_error(line, lx.error_pos, lx.error)
-        return false
+    let mut lx = Lexer { chars: line.chars(), error_pos: -1 }
+    let toks = match lx.tokenize() {
+        ok(t) => t,
+        err(e) => {
+            show_error(line, lx.error_pos, e)
+            return false
+        }
     }
-    let mut p = Parser { toks: lx.tokens, pos: 0, error: "", error_pos: -1 }
+    let mut p = Parser { toks, pos: 0, error_pos: -1 }
     let mut target = ""
-    if p.peek().kind == "ident" && p.peek().text == "let" {
+    if p.peek().token == Token::Name("let") {
         p.advance()
         let name = p.advance()
-        if name.kind != "ident" {
-            show_error(line, name.pos, "expected a variable name after 'let'")
-            return false
+        match name.token {
+            Token::Name(n) => target = n,
+            _ => {
+                show_error(line, name.pos, "expected a variable name after 'let'")
+                return false
+            }
         }
         if !p.at_op("=") {
             show_error(line, p.peek().pos, "expected '='")
             return false
         }
         p.advance()
-        target = name.text
     }
     let parsed = p.expr()
-    if parsed == nil {
-        show_error(line, p.error_pos, p.error)
+    if let e = parsed.error() {
+        show_error(line, p.error_pos, e)
         return false
     }
-    if p.peek().kind != "end" {
-        show_error(line, p.peek().pos, f"unexpected '{p.peek().text}'")
+    if p.peek().token != Token::End {
+        show_error(line, p.peek().pos, f"unexpected '{describe(p.peek().token)}'")
         return false
     }
-    env.error = ""
-    if let v = env.eval(parsed.unwrap()) {
-        if target.is_empty() {
-            println(f"  = {fmt(v)}")
-        } else {
-            env.vars[target] = v
-            println(f"  {target} = {fmt(v)}")
+    match env.eval(parsed.unwrap()) {
+        ok(v) => {
+            if target.is_empty() {
+                println(f"  = {fmt(v)}")
+            } else {
+                env.vars[target] = v
+                println(f"  {target} = {fmt(v)}")
+            }
+            return true
         }
-        return true
+        err(e) => {
+            show_error(line, -1, e)
+            return false
+        }
     }
-    show_error(line, -1, env.error)
-    return false
 }
 
 fn main() {
@@ -338,16 +322,16 @@ fn main() {
         "4 $ 2",
         "hypot(3, 4)",
     ]
-    let mut env = Env { vars: [:], error: "" }
-    let mut ok = 0
+    let mut env = Env { vars: [:] }
     println("Arc calculator (written 100% in Arc)")
     println("------------------------------------")
+    let mut ok_count = 0
     for line in program {
         println(f"> {line}")
-        if run_line(env, line) { ok += 1 }
+        if run_line(env, line) { ok_count += 1 }
     }
     println("------------------------------------")
-    println(f"{ok} succeeded, {program.len() - ok} errors")
+    println(f"{ok_count} succeeded, {program.len() - ok_count} errors")
     let mut names = env.vars.keys()
     names.sort()
     for n in names { println(f"  {n:<6} = {fmt(env.vars[n])}") }

@@ -1,0 +1,5 @@
+// ERROR: cannot assign to `total` inside a closure
+fn main() { let mut total = 0
+ let add = |x: int| { total = total + x }
+ add(1)
+ println(total) }

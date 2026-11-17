@@ -1,0 +1,10 @@
+error: unknown command 'fly'
+(skipped empty line)
+["apple": 6]
+zero leaf 0
+negative leaf -3
+leaf 9
+pair 1+2 3
+left-heavy 7
+deep 6
+value 7

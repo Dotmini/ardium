@@ -24,6 +24,11 @@ private:
     std::map<std::string, int> strLits_;     // literal -> index
     std::vector<std::string> strLitOrder_;
 
+    std::map<int, Type*> resTypes_;          // value-represented `!T` types needing a typedef
+    std::set<FnDecl*> fnValues_;             // named functions used as values
+    std::ostringstream extraFns_, extraProtos_;  // generated helpers (sort_by comparators)
+    int lessCounter_ = 0;
+
     // ---- per-function state
     struct Temp { std::string name; Type* type; bool cleared = false; };
     std::ostringstream* out_ = nullptr;
@@ -80,6 +85,16 @@ private:
     std::string builtinMethod(Node* n);
     void fmtInto(const std::string& buf, const std::string& atom, Type* t, const std::string& spec, bool quoted);
     std::string assign(Node* n);
+    std::string resIsErr(Type* rt, const std::string& a);
+    std::string resErr(Type* rt, const std::string& a);
+    std::string resVal(Type* rt, const std::string& a);
+    std::string resFromErr(Type* rt, const std::string& e);
+    std::string callClosure(Type* ft, const std::string& f, const std::vector<std::string>& args);
+    std::string genTry(Node* n);
+    void genMatch(Node* m, const std::string& result);
+    std::string patCond(Node* p, Type* t, const std::string& v);
+    void patBind(Node* p, Type* t, const std::string& v);
+    static bool irrefutablePat(Node* p);
     std::string bind(Type* t, const std::string& cexpr);  // store C expr in a fresh temp
 };
 

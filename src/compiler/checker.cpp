@@ -65,7 +65,8 @@ static const std::vector<std::string> kBuiltinFns = {
     "abs", "min", "max", "sqrt", "pow", "floor", "ceil", "round", "sin", "cos", "tan", "atan2", "exp", "log",
     "log10", "ipow", "assert", "assert_eq", "panic", "exit", "read_line", "read_file", "write_file",
     "append_file", "file_exists", "args", "time_ns", "time_ms", "unix_time", "sleep_ms", "rand_int",
-    "rand_float", "seed", "chr", "ord", "getenv", "run", "gc_count",
+    "rand_float", "seed", "chr", "ord", "getenv", "run", "gc_count", "err", "ok", "exec", "list_dir",
+    "make_dir", "remove_file",
 };
 
 // ------------------------------------------------------------------- run --
@@ -101,8 +102,9 @@ bool Checker::run(bool testMode) {
             prog_.mainFn = m;
             if (!m->params.empty())
                 err(m->loc, "`main` cannot take parameters").notes.push_back("help: use `args()` to read command-line arguments");
-            if (m->ret && m->ret->kind != TK::Void && m->ret->kind != TK::Int && !m->ret->isError())
-                err(m->loc, "`main` must return `int` or nothing, not `" + m->ret->str() + "`");
+            bool resVoid = m->ret && m->ret->kind == TK::Result && m->ret->elem->kind == TK::Void;
+            if (m->ret && m->ret->kind != TK::Void && m->ret->kind != TK::Int && !resVoid && !m->ret->isError())
+                err(m->loc, "`main` must return `int`, `!void` or nothing, not `" + m->ret->str() + "`");
         }
     }
     for (FnDecl* fn : prog_.fns) {
@@ -122,10 +124,26 @@ void Checker::collectDecls() {
             continue;
         }
         prog_.structByName[sd->name] = sd;
-        sd->type = T.structT(sd);
+        sd->type = sd->isEnum ? T.enumT(sd) : T.structT(sd);
     }
-    for (StructDecl* sd : prog_.structs)
+    for (StructDecl* sd : prog_.structs) {
         for (FieldDecl& f : sd->fields) f.type = resolveType(f.te);
+        // enum payloads are stored as flattened fields `v<variant>_<index>`
+        for (size_t vi = 0; vi < sd->variants.size(); vi++) {
+            Variant& v = sd->variants[vi];
+            v.firstField = (int)sd->fields.size();
+            for (size_t j = 0; j < v.tes.size(); j++) {
+                Type* t = resolveType(v.tes[j]);
+                if (t->kind == TK::Void) { err(v.tes[j]->loc, "a variant payload cannot be `void`"); t = T.errorT; }
+                v.types.push_back(t);
+                FieldDecl f;
+                f.name = "v" + std::to_string(vi) + "_" + std::to_string(j);
+                f.type = t;
+                f.loc = v.tes[j]->loc;
+                sd->fields.push_back(f);
+            }
+        }
+    }
 
     for (FnDecl* fn : prog_.methods) {
         StructDecl* placeholder = fn->owner;
@@ -192,9 +210,28 @@ Type* Checker::resolveType(TypeExpr* te) {
         if (v->kind == TK::Void) { err(te->b->loc, "maps cannot hold `void`"); return T.errorT; }
         return T.map(k, v);
     }
+    case TypeExpr::Result: {
+        Type* e = resolveType(te->a);
+        if (e->isError()) return e;
+        if (e->kind == TK::Result) { err(te->loc, "nested results (`!!T`) are not supported"); return T.errorT; }
+        return T.result(e);
+    }
+    case TypeExpr::Func: {
+        std::vector<Type*> ps;
+        for (TypeExpr* p : te->params) {
+            Type* pt = resolveType(p);
+            if (pt->isError()) return pt;
+            if (pt->kind == TK::Void) { err(p->loc, "a parameter cannot be `void`"); return T.errorT; }
+            ps.push_back(pt);
+        }
+        Type* r = te->b ? resolveType(te->b) : T.voidT;
+        if (r->isError()) return r;
+        return T.func(ps, r);
+    }
     case TypeExpr::Optional: {
         Type* e = resolveType(te->a);
         if (e->isError()) return e;
+        if (e->kind == TK::Result) { err(te->loc, "`?!T` is not supported; use `!?T`"); return T.errorT; }
         if (e->kind == TK::Optional) { err(te->loc, "nested optionals (`??T`) are not supported"); return T.errorT; }
         if (e->kind == TK::Void) { err(te->loc, "`?void` is not a valid type"); return T.errorT; }
         return T.optional(e);
@@ -230,9 +267,10 @@ Type* Checker::ensureReturnType(FnDecl* fn, const Loc& useLoc) {
 }
 
 static bool hasValueReturn(Node* n) {
-    if (!n) return false;
+    if (!n || n->kind == NK::Lambda) return false;  // a closure's return is its own
     if (n->kind == NK::Return) return !n->kids.empty();
     for (Node* k : n->kids) if (hasValueReturn(k)) return true;
+    for (Node* a : n->pats) if (hasValueReturn(a)) return true;
     return false;
 }
 
@@ -246,6 +284,8 @@ void Checker::checkFn(FnDecl* fn) {
     FnDecl* savedFn = fn_;
     Node* savedGlobal = curGlobal_;
     curGlobal_ = nullptr;
+    auto savedLambdas = std::move(lambdas_);
+    lambdas_.clear();
     auto savedScopes = std::move(scopes_);
     auto savedScopeVars = std::move(scopeVars_);
     int savedLoop = loopDepth_;
@@ -267,7 +307,7 @@ void Checker::checkFn(FnDecl* fn) {
     popScope();
 
     if (!fn->ret) fn->ret = T.voidT;
-    if (fn->ret->kind != TK::Void && !fn->ret->isError() && !alwaysReturns(fn->body)) {
+    if (needsReturn(fn->ret) && !alwaysReturns(fn->body)) {
         Diag& d = err(fn->loc, "function `" + fn->displayName() + "` might not return a value on every path",
                       "expected to return `" + fn->ret->str() + "`");
         d.notes.push_back("help: add a `return` statement at the end of the function");
@@ -275,6 +315,7 @@ void Checker::checkFn(FnDecl* fn) {
 
     fn_ = savedFn;
     curGlobal_ = savedGlobal;
+    lambdas_ = std::move(savedLambdas);
     scopes_ = std::move(savedScopes);
     scopeVars_ = std::move(savedScopeVars);
     loopDepth_ = savedLoop;
@@ -384,7 +425,13 @@ Var* Checker::declare(const std::string& name, Type* t, bool mut, const Loc& loc
 Var* Checker::lookup(const std::string& name) {
     for (size_t i = scopes_.size(); i-- > 0;) {
         auto it = scopes_[i].find(name);
-        if (it != scopes_[i].end()) return it->second;
+        if (it == scopes_[i].end()) continue;
+        Var* v = it->second;
+        // a variable from outside a closure is captured (by value) by each
+        // closure between its scope and here, outermost first
+        for (auto& L : lambdas_)
+            if (i < L.scopeBase) v = captureInto(L.fn, v);
+        return v;
     }
     auto g = globals_.find(name);
     if (g != globals_.end()) return g->second;
@@ -400,6 +447,8 @@ Var* Checker::lookup(const std::string& name) {
         Node* savedGlobal = curGlobal_;
         curGlobal_ = let;
         FnDecl* savedFn = fn_;
+        auto savedLambdas = std::move(lambdas_);
+        lambdas_.clear();
         auto savedScopes = std::move(scopes_);
         auto savedScopeVars = std::move(scopeVars_);
         int savedLoop = loopDepth_;
@@ -419,6 +468,7 @@ Var* Checker::lookup(const std::string& name) {
         }
         fn_ = savedFn;
         curGlobal_ = savedGlobal;
+        lambdas_ = std::move(savedLambdas);
         scopes_ = std::move(savedScopes);
         scopeVars_ = std::move(savedScopeVars);
         loopDepth_ = savedLoop;
@@ -459,9 +509,10 @@ bool Checker::containsBreak(Node* n) {
     if (!n) return false;
     switch (n->kind) {
     case NK::Break: return true;
-    case NK::While: case NK::Loop: case NK::ForRange: case NK::ForEach: return false;
+    case NK::While: case NK::Loop: case NK::ForRange: case NK::ForEach: case NK::Lambda: return false;
     default:
         for (Node* k : n->kids) if (containsBreak(k)) return true;
+        for (Node* a : n->pats) if (containsBreak(a)) return true;
         return false;
     }
 }
@@ -482,6 +533,10 @@ bool Checker::alwaysReturns(Node* n) {
         Node* e = n->kids[0];
         return e->kind == NK::Call && (e->builtin == BI::Panic || e->builtin == BI::Exit);
     }
+    case NK::Match:
+        // matches are exhaustive, so it returns if every arm does
+        for (Node* arm : n->pats) if (!alwaysReturns(arm->kids[0])) return false;
+        return true;
     default: return false;
     }
 }
@@ -544,7 +599,14 @@ void Checker::stmt(Node* n) {
     case NK::ExprStmt: {
         Node* e = n->kids[0];
         expr(e);
-        bool effect = e->kind == NK::Call || e->kind == NK::MethodCall || e->kind == NK::PathCall;
+        if (e->type && e->type->kind == TK::Result) {
+            Diag& d = diag_.warning(e->loc, "unused `" + e->type->str() + "`: an error it contains would be silently ignored",
+                                    "result ignored");
+            d.notes.push_back("help: propagate it with `?`, or handle it with `match`, `if let` or `??`");
+            return;
+        }
+        bool effect = e->kind == NK::Call || e->kind == NK::MethodCall || e->kind == NK::PathCall ||
+                      e->kind == NK::Try || e->kind == NK::Match;
         if (!effect && !(e->type && e->type->isError())) {
             Diag& d = diag_.warning(e->loc, "expression result is unused", "this value is discarded");
             if (e->kind == NK::Binary && e->str == "==") d.notes.push_back("help: did you mean to assign with `=`?");
@@ -561,12 +623,16 @@ void Checker::stmt(Node* n) {
         }
         return;
     }
+    case NK::Match:
+        checkMatch(n, nullptr);
+        return;
     case NK::IfLet: {
         Type* t = expr(n->kids[0]);
         Type* inner = T.errorT;
         if (t->kind == TK::Optional) inner = t->elem;
+        else if (t->kind == TK::Result && t->elem->kind != TK::Void) inner = t->elem;
         else if (!t->isError()) {
-            Diag& d = err(n->kids[0]->loc, "`if let` requires an optional value, found `" + t->str() + "`");
+            Diag& d = err(n->kids[0]->loc, "`if let` requires an optional (`?T`) or result (`!T`) value, found `" + t->str() + "`");
             d.notes.push_back("help: optional types are written `?T`, e.g. `?int`");
         }
         pushScope();
@@ -633,14 +699,26 @@ void Checker::stmt(Node* n) {
         if (!fn_) { err(n->loc, "`return` outside of a function"); return; }
         if (n->kids.empty()) {
             if (fn_->retFromBody && !fn_->ret) fn_->ret = T.voidT;
-            else if (fn_->ret && fn_->ret->kind != TK::Void && !fn_->ret->isError()) {
+            else if (fn_->ret && needsReturn(fn_->ret)) {
                 Diag& d = err(n->loc, "`return` without a value in a function returning `" + fn_->ret->str() + "`");
                 d.notes.push_back("help: return a value: `return x`");
             }
             return;
         }
         Type* t = expr(n->kids[0], fn_->ret);
+        // a closure with an expression body whose value is void: just run it
+        if (n->flag && t->kind == TK::Void && (!fn_->ret || fn_->ret->kind == TK::Void)) {
+            if (!fn_->ret) fn_->ret = T.voidT;
+            n->isConst = true;  // codegen: evaluate, then return nothing
+            return;
+        }
         if (fn_->retFromBody && !fn_->ret) {
+            if (t->kind == TK::ErrVal) {
+                Diag& d = err(n->kids[0]->loc, "cannot infer the return type from `err(...)`");
+                d.notes.push_back("help: declare the return type: `fn " + fn_->name + "(...) -> !int`");
+                fn_->ret = T.errorT;
+                return;
+            }
             if (t->kind == TK::Nil) {
                 Diag& d = err(n->kids[0]->loc, "cannot infer the return type from `nil`");
                 d.notes.push_back("help: declare the return type: `fn " + fn_->name + "(...) -> ?int`");
@@ -682,6 +760,29 @@ bool Checker::coerce(Node*& n, Type* target, const std::string& what) {
         n->type = target;
         return true;
     }
+    if (target->kind == TK::Result) {
+        if (t->kind == TK::ErrVal) { n->type = target; return true; }
+        Type* inner = target->elem;
+        if (inner->kind != TK::Void) {
+            if (inner->kind == TK::Float && n->kind == NK::IntLit) {
+                n->kind = NK::FloatLit;
+                n->fval = (double)n->ival;
+                n->type = T.floatT;
+                t = T.floatT;
+            }
+            if (inner->kind == TK::Optional && (t->kind == TK::Nil || t == inner->elem)) {
+                coerce(n, inner);
+                t = n->type;
+            }
+            if (t == inner) {
+                Node* w = new Node(NK::Wrap, n->loc);
+                w->kids.push_back(n);
+                w->type = target;
+                n = w;
+                return true;
+            }
+        }
+    }
     if (target->kind == TK::Optional) {
         if (t->kind == TK::Nil) { n->type = target; return true; }
         if (target->elem->kind == TK::Float && n->kind == NK::IntLit) {
@@ -713,13 +814,27 @@ Type* Checker::unify(Node*& a, Node*& b) {
 }
 
 bool Checker::isComparable(Type* t) {
-    return t->kind != TK::Void && t->kind != TK::Nil;
+    return t->kind != TK::Void && t->kind != TK::Nil && t->kind != TK::Func && t->kind != TK::ErrVal;
+}
+
+// control never reaches the end of this block
+bool Checker::diverges(Node* b) {
+    if (alwaysReturns(b)) return true;
+    if (b->kind != NK::Block || b->kids.empty()) return false;
+    Node* last = b->kids.back();
+    return last->kind == NK::Break || last->kind == NK::Continue || alwaysReturns(last);
+}
+
+bool Checker::needsReturn(Type* ret) {
+    if (!ret || ret->isError() || ret->kind == TK::Void) return false;
+    return !(ret->kind == TK::Result && ret->elem->kind == TK::Void);
 }
 
 bool Checker::isPrintable(Type* t, const Loc& loc) {
     if (t->isError()) return false;
     if (t->kind == TK::Void) { err(loc, "this expression does not produce a value", "returns nothing"); return false; }
     if (t->kind == TK::Nil) { err(loc, "cannot infer the type of `nil` here"); return false; }
+    if (t->kind == TK::ErrVal) { err(loc, "`err(...)` must be returned from a function returning `!T`"); return false; }
     return true;
 }
 
@@ -774,9 +889,14 @@ Type* Checker::expr(Node* n, Type* expected) {
     case NK::Ident: {
         Var* v = lookup(n->str);
         if (!v) {
-            if (prog_.fnByName.count(n->str)) {
-                Diag& d = err(n->loc, "`" + n->str + "` is a function, not a value");
-                d.notes.push_back("help: call it: `" + n->str + "()`");
+            auto fit = prog_.fnByName.find(n->str);
+            if (fit != prog_.fnByName.end()) {
+                // a named function used as a value (e.g. `xs.map(double)`)
+                FnDecl* f = fit->second;
+                n->fn = f;
+                noteCall(f);
+                t = T.func(f->paramTypes, ensureReturnType(f, n->loc));
+                break;
             } else if (n->str == "self") {
                 err(n->loc, "`self` is only available inside methods that take `self`");
             } else if (n->str == "True" || n->str == "False" || n->str == "None" || n->str == "null" || n->str == "NULL") {
@@ -822,6 +942,11 @@ Type* Checker::expr(Node* n, Type* expected) {
     case NK::Field: {
         Type* o = expr(n->kids[0]);
         if (o->isError()) break;
+        if (o->kind == TK::Enum) {
+            Diag& d = err(n->loc, "enum `" + o->str() + "` has no fields");
+            d.notes.push_back("help: read the payload with `match`: `" + o->str() + "::Variant(x) => ...`");
+            break;
+        }
         if (o->kind == TK::Struct) {
             int idx = o->sd->fieldIndex(n->str);
             if (idx >= 0) { t = o->sd->fields[idx].type; n->ival = idx; break; }
@@ -967,6 +1092,13 @@ Type* Checker::expr(Node* n, Type* expected) {
             break;
         }
         StructDecl* sd = it->second;
+        if (sd->isEnum) {
+            Diag& d = err(n->loc, "`" + sd->name + "` is an enum, not a struct");
+            d.notes.push_back("help: create a value with a variant: `" + sd->name + "::" + sd->variants[0].name +
+                              (sd->variants[0].tes.empty() ? "`" : "(...)`"));
+            for (Node* k : n->kids) expr(k);
+            break;
+        }
         std::vector<int> seen(sd->fields.size(), 0);
         bool ok = true;
         for (size_t i = 0; i < n->names.size(); i++) {
@@ -1013,6 +1145,10 @@ Type* Checker::expr(Node* n, Type* expected) {
         break;
     }
     case NK::Wrap: t = n->type; break;
+    case NK::Match: t = checkMatch(n, expected); break;
+    case NK::Lambda: t = checkLambda(n, expected); break;
+    case NK::Try: t = checkTry(n); break;
+    case NK::Path: t = checkPath(n); break;
     default:
         err(n->loc, "internal error: unexpected expression");
     }
@@ -1032,6 +1168,12 @@ Type* Checker::binary(Node* n) {
     if (op == "??") {
         Type* a = expr(n->kids[0]);
         if (a->isError()) { expr(n->kids[1]); return T.errorT; }
+        if (a->kind == TK::Result && a->elem->kind != TK::Void) {
+            Type* b = expr(n->kids[1], a->elem);
+            (void)b;
+            coerce(n->kids[1], a->elem, "");
+            return a->elem;
+        }
         if (a->kind != TK::Optional) {
             Diag& d = err(n->kids[0]->loc, "the left side of `??` must be optional, found `" + a->str() + "`");
             d.notes.push_back("help: `??` provides a default for a `nil` value: `maybe ?? 0`");
@@ -1104,7 +1246,12 @@ void Checker::requireMutable(Node* target, const Loc& at, const std::string& act
     }
     if (root->kind != NK::Ident || !root->var) return;
     Var* v = root->var;
-    v->assigned = true;
+    for (Var* o = v; o; o = o->captureOf) o->assigned = true;  // a closure's mutation counts for the original
+    if (v->isCapture && direct && action == "assign to") {
+        Diag& d = err(at, "cannot assign to `" + v->name + "` inside a closure", "closures capture variables by value");
+        d.notes.push_back("help: to share mutable state, keep it in an array, map or struct and modify its contents");
+        return;
+    }
     if (v->mut) return;
     std::string text = "`" + srcText(target->loc) + "`";
     std::string msg = action;
@@ -1163,6 +1310,32 @@ void Checker::checkArgs(Node* n, size_t firstArg, FnDecl* fn, size_t firstParam)
 }
 
 Type* Checker::call(Node* n) {
+    if (n->isConst) {  // callee is an expression: kids[0]
+        Type* ft = expr(n->kids[0]);
+        if (ft->isError()) { for (size_t i = 1; i < n->kids.size(); i++) expr(n->kids[i]); return T.errorT; }
+        if (ft->kind != TK::Func) {
+            err(n->kids[0]->loc, "a value of type `" + ft->str() + "` cannot be called");
+            for (size_t i = 1; i < n->kids.size(); i++) expr(n->kids[i]);
+            return T.errorT;
+        }
+        n->builtin = BI::CallValue;
+        checkValueArgs(n, 1, ft);
+        return ft->elem;
+    }
+    // a local/global variable holding a function value shadows functions
+    if (Var* fv = lookup(n->str)) {
+        fv->used = true;
+        if (fv->isGlobal) noteGlobalUse(fv);
+        if (fv->type->kind != TK::Func) {
+            if (!fv->type->isError()) err(n->loc, "`" + n->str + "` is a `" + fv->type->str() + "`, not a function");
+            for (Node* k : n->kids) expr(k);
+            return T.errorT;
+        }
+        n->var = fv;
+        n->builtin = BI::CallValue;
+        checkValueArgs(n, 0, fv->type);
+        return fv->type->elem;
+    }
     auto it = prog_.fnByName.find(n->str);
     if (it != prog_.fnByName.end()) {
         FnDecl* fn = it->second;
@@ -1199,11 +1372,36 @@ Type* Checker::pathCall(Node* n) {
         return T.errorT;
     }
     StructDecl* sd = it->second;
+    if (sd->isEnum && sd->variantIndex(n->str) >= 0) {
+        int vi = sd->variantIndex(n->str);
+        Variant& v = sd->variants[vi];
+        n->flag = true;  // variant construction
+        n->ival = vi;
+        if (v.types.empty()) {
+            Diag& d = err(n->loc, "variant `" + tname + "::" + v.name + "` has no payload");
+            d.notes.push_back("help: write it without parentheses: `" + tname + "::" + v.name + "`");
+            for (Node* k : n->kids) expr(k);
+            return sd->type;
+        }
+        if (n->kids.size() != v.types.size()) {
+            Diag& d = err(n->loc, "variant `" + tname + "::" + v.name + "` takes " + std::to_string(v.types.size()) + " value" +
+                                      (v.types.size() == 1 ? "" : "s") + " but " + std::to_string(n->kids.size()) + " were supplied");
+            (void)d;
+            for (Node* k : n->kids) expr(k);
+            return sd->type;
+        }
+        for (size_t i = 0; i < n->kids.size(); i++) {
+            expr(n->kids[i], v.types[i]);
+            coerce(n->kids[i], v.types[i], "variant payload");
+        }
+        return sd->type;
+    }
     auto mit = sd->methods.find(n->str);
     if (mit == sd->methods.end()) {
         std::vector<std::string> names;
         for (auto& kv : sd->methods) names.push_back(kv.first);
-        Diag& d = err(n->loc, "no function named `" + n->str + "` found for struct `" + tname + "`");
+        if (sd->isEnum) for (auto& v : sd->variants) names.push_back(v.name);
+        Diag& d = err(n->loc, "no function or variant named `" + n->str + "` found for `" + tname + "`");
         std::string s = suggest(n->str, names);
         if (!s.empty()) d.notes.push_back("help: did you mean `" + tname + "::" + s + "`?");
         for (Node* k : n->kids) expr(k);
@@ -1234,12 +1432,20 @@ Type* Checker::methodCall(Node* n) {
         for (size_t i = 1; i < n->kids.size(); i++) expr(n->kids[i]);
         return T.errorT;
     }
-    if (recv->kind == TK::Struct) {
+    if (recv->kind == TK::Struct || recv->kind == TK::Enum) {
         StructDecl* sd = recv->sd;
         auto it = sd->methods.find(n->str);
+        int fidx = sd->isEnum ? -1 : sd->fieldIndex(n->str);
+        if (it == sd->methods.end() && fidx >= 0 && sd->fields[fidx].type->kind == TK::Func) {
+            // `obj.callback(args)`: call the function stored in a field
+            n->builtin = BI::CallValue;
+            n->ival = fidx;
+            checkValueArgs(n, 1, sd->fields[fidx].type);
+            return sd->fields[fidx].type->elem;
+        }
         if (it == sd->methods.end()) {
             for (size_t i = 1; i < n->kids.size(); i++) expr(n->kids[i]);
-            if (sd->fieldIndex(n->str) >= 0) {
+            if (fidx >= 0) {
                 Diag& d = err(n->loc, "`" + n->str + "` is a field of `" + sd->name + "`, not a method");
                 d.notes.push_back("help: remove the parentheses: `." + n->str + "`");
                 return T.errorT;
@@ -1459,6 +1665,32 @@ Type* Checker::builtinCall(Node* n) {
         if (expectArgs(n, 0, 1, "ord(c: str) -> int")) argT(0, T.strT);
         return T.intT;
     }
+    if (f == "err") {
+        setB(BI::Err);
+        if (expectArgs(n, 0, 1, "err(message: str)")) argT(0, T.strT, "error message");
+        return T.errValT;
+    }
+    if (f == "ok") {
+        setB(BI::Ok);
+        if (n->kids.empty()) return T.result(T.voidT);
+        if (!expectArgs(n, 0, 1, "ok(value)")) return T.errorT;
+        return expr(n->kids[0]);
+    }
+    if (f == "exec") {
+        setB(BI::Exec);
+        if (expectArgs(n, 0, 2, "exec(program: str, args: [str]) -> int")) { argT(0, T.strT); argT(1, T.array(T.strT)); }
+        return T.intT;
+    }
+    if (f == "list_dir") {
+        setB(BI::ListDir);
+        if (expectArgs(n, 0, 1, "list_dir(path: str) -> ![str]")) argT(0, T.strT);
+        return T.result(T.array(T.strT));
+    }
+    if (f == "make_dir" || f == "remove_file") {
+        setB(f == "make_dir" ? BI::MakeDir : BI::RemoveFile);
+        if (expectArgs(n, 0, 1, f + "(path: str) -> !void")) argT(0, T.strT);
+        return T.result(T.voidT);
+    }
     err(n->loc, "internal error: unknown builtin `" + f + "`");
     return T.errorT;
 }
@@ -1522,7 +1754,8 @@ Type* Checker::builtinMethod(Node* n, Type* recv) {
     if (recv->kind == TK::Array) {
         Type* E = recv->elem;
         static const std::vector<std::string> names = {"len", "is_empty", "push", "pop", "insert", "remove", "clear",
-            "contains", "index_of", "reverse", "sort", "join", "slice", "copy", "last", "first"};
+            "contains", "index_of", "reverse", "sort", "join", "slice", "copy", "last", "first", "map", "filter", "any",
+            "all", "find", "fold", "sort_by", "sum", "min", "max"};
         auto mutating = [&]() { requireMutable(n->kids[0], n->kids[0]->loc, "call `" + m + "` on {}"); };
         if (m == "len") { n->builtin = BI::ALen; expectArgs(n, 1, 0, sig("len() -> int")); return T.intT; }
         if (m == "is_empty") { n->builtin = BI::AIsEmpty; expectArgs(n, 1, 0, sig("is_empty() -> bool")); return T.boolT; }
@@ -1579,6 +1812,59 @@ Type* Checker::builtinMethod(Node* n, Type* recv) {
         if (m == "copy" || m == "clone") { n->builtin = BI::ACopy; expectArgs(n, 1, 0, sig("copy()")); return recv; }
         if (m == "last") { n->builtin = BI::ALast; expectArgs(n, 1, 0, sig("last() -> " + E->str())); return E; }
         if (m == "first") { n->builtin = BI::AFirst; expectArgs(n, 1, 0, sig("first() -> " + E->str())); return E; }
+        if (m == "map") {
+            n->builtin = BI::AMap;
+            if (!expectArgs(n, 1, 1, sig("map(f: fn(" + E->str() + ") -> R) -> [R]"))) return T.errorT;
+            Type* ft = checkFnArg(n->kids[1], {E}, nullptr);
+            if (ft->kind != TK::Func) return T.errorT;
+            if (ft->elem->kind == TK::Void) { err(n->kids[1]->loc, "the function given to `map` must return a value"); return T.errorT; }
+            return T.array(ft->elem);
+        }
+        if (m == "filter" || m == "any" || m == "all" || m == "find") {
+            n->builtin = m == "filter" ? BI::AFilter : m == "any" ? BI::AAny : m == "all" ? BI::AAll : BI::AFind;
+            if (!expectArgs(n, 1, 1, sig(m + "(f: fn(" + E->str() + ") -> bool)"))) return T.errorT;
+            checkFnArg(n->kids[1], {E}, T.boolT);
+            if (m == "filter") return recv;
+            if (m == "find") {
+                if (E->kind == TK::Optional) { err(n->loc, "`find` on an array of optionals is not supported"); return T.errorT; }
+                return T.optional(E);
+            }
+            return T.boolT;
+        }
+        if (m == "fold") {
+            n->builtin = BI::AFold;
+            if (!expectArgs(n, 1, 2, sig("fold(init: U, f: fn(U, " + E->str() + ") -> U) -> U"))) return T.errorT;
+            Type* U = expr(n->kids[1]);
+            if (U->isError()) { expr(n->kids[2]); return T.errorT; }
+            if (U->kind == TK::Nil || U->kind == TK::Void || U->kind == TK::ErrVal) {
+                err(n->kids[1]->loc, "cannot infer the accumulator type of `fold` from this value");
+                return T.errorT;
+            }
+            checkFnArg(n->kids[2], {U, E}, U);
+            return U;
+        }
+        if (m == "sort_by") {
+            n->builtin = BI::ASortBy;
+            mutating();
+            if (expectArgs(n, 1, 1, sig("sort_by(less: fn(" + E->str() + ", " + E->str() + ") -> bool)")))
+                checkFnArg(n->kids[1], {E, E}, T.boolT);
+            return T.voidT;
+        }
+        if (m == "sum") {
+            n->builtin = BI::ASum;
+            expectArgs(n, 1, 0, sig("sum()"));
+            if (!E->isNumeric()) { err(n->loc, "`sum` requires an array of `int` or `float`, found `" + recv->str() + "`"); return T.errorT; }
+            return E;
+        }
+        if (m == "min" || m == "max") {
+            n->builtin = m == "min" ? BI::AMin : BI::AMax;
+            expectArgs(n, 1, 0, sig(m + "() -> ?" + E->str()));
+            if (!E->isNumeric() && E->kind != TK::Str) {
+                err(n->loc, "`" + m + "` requires an array of `int`, `float` or `str`, found `" + recv->str() + "`");
+                return T.errorT;
+            }
+            return T.optional(E);
+        }
         return unknown(names);
     }
 
@@ -1621,6 +1907,33 @@ Type* Checker::builtinMethod(Node* n, Type* recv) {
         return unknown(names);
     }
 
+    if (recv->kind == TK::Result) {
+        Type* E = recv->elem;
+        static const std::vector<std::string> names = {"is_ok", "is_err", "unwrap", "expect", "unwrap_or", "error"};
+        if (m == "is_ok" || m == "is_err") {
+            n->builtin = m == "is_ok" ? BI::RIsOk : BI::RIsErr;
+            expectArgs(n, 1, 0, sig(m + "() -> bool"));
+            return T.boolT;
+        }
+        if (m == "unwrap" || m == "expect") {
+            n->builtin = BI::RUnwrap;
+            if (m == "expect") { if (expectArgs(n, 1, 1, sig("expect(message: str)"))) argT(1, T.strT); }
+            else expectArgs(n, 1, 0, sig("unwrap() -> " + E->str()));
+            return E;
+        }
+        if (m == "unwrap_or") {
+            n->builtin = BI::RUnwrapOr;
+            if (E->kind == TK::Void) { err(n->loc, "`unwrap_or` needs a value type, found `" + recv->str() + "`"); return T.errorT; }
+            if (expectArgs(n, 1, 1, sig("unwrap_or(default) -> " + E->str()))) argT(1, E);
+            return E;
+        }
+        if (m == "error") {
+            n->builtin = BI::RError;
+            expectArgs(n, 1, 0, sig("error() -> ?str"));
+            return T.optional(T.strT);
+        }
+        return unknown(names);
+    }
     if (recv->kind == TK::Optional) {
         Type* E = recv->elem;
         static const std::vector<std::string> names = {"unwrap", "is_some", "is_nil", "unwrap_or"};
@@ -1647,6 +1960,391 @@ Type* Checker::builtinMethod(Node* n, Type* recv) {
     for (size_t i = 1; i < n->kids.size(); i++) expr(n->kids[i]);
     err(n->loc, "type `" + recv->str() + "` has no methods", "no method `" + m + "`");
     return T.errorT;
+}
+
+}  // namespace arc
+
+namespace arc {
+
+// ------------------------------------------------------------ closures --
+
+Var* Checker::captureInto(FnDecl* L, Var* outer) {
+    for (auto& c : L->captures)
+        if (c.first == outer) return c.second;
+    Var* inner = new Var();
+    inner->name = outer->name;
+    inner->type = outer->type;
+    inner->mut = outer->mut;
+    inner->isCapture = true;
+    inner->captureOf = outer;
+    inner->used = true;
+    inner->loc = outer->loc;
+    outer->used = true;
+    L->captures.push_back({outer, inner});
+    return inner;
+}
+
+Type* Checker::checkLambda(Node* n, Type* expected) {
+    bool haveExp = expected && expected->kind == TK::Func;
+    if (haveExp && expected->params.size() != n->names.size()) {
+        err(n->loc, "expected a closure with " + std::to_string(expected->params.size()) + " parameter" +
+                        (expected->params.size() == 1 ? "" : "s") + ", found " + std::to_string(n->names.size()));
+        haveExp = false;
+    }
+    std::vector<Type*> ptypes;
+    for (size_t i = 0; i < n->names.size(); i++) {
+        if (n->tyExprs[i]) ptypes.push_back(resolveType(n->tyExprs[i]));
+        else if (haveExp) ptypes.push_back(expected->params[i]);
+        else {
+            Diag& d = err(n->nameLocs[i], "cannot infer the type of closure parameter `" + n->names[i] + "`");
+            d.notes.push_back("help: annotate it: `|" + n->names[i] + ": int| ...`");
+            ptypes.push_back(T.errorT);
+        }
+    }
+    FnDecl* L = new FnDecl();
+    L->name = "closure";
+    L->loc = n->loc;
+    L->isLambda = true;
+    L->lambdaId = (int)prog_.lambdas.size();
+    L->body = n->kids[0];
+    L->paramTypes = ptypes;
+    for (size_t i = 0; i < n->names.size(); i++) {
+        Param p;
+        p.name = n->names[i];
+        p.loc = n->nameLocs[i];
+        L->params.push_back(p);
+    }
+    if (n->tyExpr) L->ret = resolveType(n->tyExpr);
+    else if (haveExp && expected->elem) L->ret = expected->elem;
+    L->retFromBody = L->ret == nullptr;
+    if (!L->ret && !hasValueReturn(L->body)) L->ret = T.voidT;
+    prog_.lambdas.push_back(L);
+    noteCall(L);  // creating a closure here may run it here
+
+    FnDecl* savedFn = fn_;
+    int savedLoop = loopDepth_;
+    Node* savedGlobal = curGlobal_;
+    lambdas_.push_back({L, scopes_.size()});
+    fn_ = L;
+    loopDepth_ = 0;
+    curGlobal_ = nullptr;
+    L->state = 1;
+    pushScope();
+    for (size_t i = 0; i < L->params.size(); i++)
+        L->params[i].var = declare(L->params[i].name, ptypes[i], false, L->params[i].loc, true);
+    block(L->body, false);
+    popScope();
+    lambdas_.pop_back();
+    fn_ = savedFn;
+    loopDepth_ = savedLoop;
+    curGlobal_ = savedGlobal;
+    if (!L->ret) L->ret = T.voidT;
+    if (needsReturn(L->ret) && !alwaysReturns(L->body)) {
+        Diag& d = err(n->loc, "closure might not return a value on every path", "expected to return `" + L->ret->str() + "`");
+        d.notes.push_back("help: add a `return` at the end of the closure body");
+    }
+    L->state = 2;
+    n->fn = L;
+    return T.func(ptypes, L->ret);
+}
+
+// A function-valued argument: a closure, a named function or a variable.
+Type* Checker::checkFnArg(Node*& arg, const std::vector<Type*>& params, Type* ret) {
+    Type* t = expr(arg, T.func(params, ret));
+    if (t->isError()) return t;
+    bool ok = t->kind == TK::Func && t->params == params && (!ret || t->elem == ret);
+    if (!ok) {
+        std::string want = "fn(";
+        for (size_t i = 0; i < params.size(); i++) want += (i ? ", " : "") + params[i]->str();
+        want += ")" + (ret ? std::string(" -> ") + ret->str() : std::string(" -> ..."));
+        Diag& d = err(arg->loc, "expected a function `" + want + "`, found `" + t->str() + "`");
+        d.notes.push_back("help: pass a closure, e.g. `|x| ...`, or the name of a function with that signature");
+        return T.errorT;
+    }
+    return t;
+}
+
+void Checker::checkValueArgs(Node* n, size_t firstArg, Type* ft) {
+    size_t nargs = n->kids.size() - firstArg;
+    if (nargs != ft->params.size()) {
+        err(n->loc, "this function value takes " + std::to_string(ft->params.size()) + " argument" +
+                        (ft->params.size() == 1 ? "" : "s") + " but " + std::to_string(nargs) + (nargs == 1 ? " was" : " were") +
+                        " supplied")
+            .notes.push_back("note: its type is `" + ft->str() + "`");
+        for (size_t i = firstArg; i < n->kids.size(); i++) expr(n->kids[i]);
+        return;
+    }
+    for (size_t i = 0; i < nargs; i++) {
+        expr(n->kids[firstArg + i], ft->params[i]);
+        coerce(n->kids[firstArg + i], ft->params[i], "argument expects `" + ft->params[i]->str() + "`");
+    }
+}
+
+// ------------------------------------------------------------- results --
+
+Type* Checker::checkTry(Node* n) {
+    Type* ot = expr(n->kids[0]);
+    if (ot->isError()) return T.errorT;
+    Type* fr = fn_ ? fn_->ret : nullptr;
+    std::string fname = fn_ ? (fn_->isLambda ? std::string("this closure") : "`" + fn_->displayName() + "`") : "";
+    if (ot->kind != TK::Result && ot->kind != TK::Optional) {
+        Diag& d = err(n->loc, "`?` needs a `!T` (result) or `?T` (optional) value, found `" + ot->str() + "`");
+        d.notes.push_back("help: remove the `?`");
+        return T.errorT;
+    }
+    if (!fn_) { err(n->loc, "`?` can only be used inside a function"); return ot->elem; }
+    if (!fr) {
+        Diag& d = err(n->loc, "a function that uses `?` must declare its return type");
+        d.notes.push_back(std::string("help: add it to the signature, e.g. `-> ") + (ot->kind == TK::Result ? "!int`" : "?int`"));
+        return ot->elem;
+    }
+    if (ot->kind == TK::Result && fr->kind != TK::Result) {
+        Diag& d = err(n->loc, "`?` passes the error on, but " + fname + " returns `" + fr->str() + "`", "error cannot be returned");
+        d.notes.push_back("help: return a result (`-> !" + fr->str() + "`), or handle the error here with `match`, `if let` or `??`");
+        return ot->elem;
+    }
+    if (ot->kind == TK::Optional && fr->kind != TK::Optional) {
+        Diag& d = err(n->loc, "`?` returns `nil` early, but " + fname + " returns `" + fr->str() + "`");
+        d.notes.push_back("help: return an optional (`-> ?" + fr->str() + "`), or handle `nil` here with `??` or `if let`");
+        return ot->elem;
+    }
+    return ot->elem;
+}
+
+// `Shape::Empty` — a variant without payload
+Type* Checker::checkPath(Node* n) {
+    auto it = prog_.structByName.find(n->names[0]);
+    if (it == prog_.structByName.end()) {
+        err(n->loc, "cannot find enum `" + n->names[0] + "`", "not found");
+        return T.errorT;
+    }
+    StructDecl* sd = it->second;
+    int vi = sd->isEnum ? sd->variantIndex(n->str) : -1;
+    if (vi < 0) {
+        if (sd->methods.count(n->str)) {
+            Diag& d = err(n->loc, "`" + n->names[0] + "::" + n->str + "` is a function; call it with `(...)`");
+            (void)d;
+        } else {
+            std::vector<std::string> names;
+            for (auto& v : sd->variants) names.push_back(v.name);
+            Diag& d = err(n->loc, std::string(sd->isEnum ? "no variant" : "no item") + " named `" + n->str + "` in `" + sd->name + "`");
+            std::string sug = suggest(n->str, names);
+            if (!sug.empty()) d.notes.push_back("help: did you mean `" + sd->name + "::" + sug + "`?");
+        }
+        return T.errorT;
+    }
+    if (!sd->variants[vi].types.empty()) {
+        Diag& d = err(n->loc, "variant `" + sd->name + "::" + n->str + "` needs a payload");
+        d.notes.push_back("help: pass the values: `" + sd->name + "::" + n->str + "(...)`");
+        return sd->type;
+    }
+    n->ival = vi;
+    return sd->type;
+}
+
+// --------------------------------------------------------------- match --
+
+// Checks one (possibly nested) pattern against the matched type `t` and
+// declares its bindings in the current scope.
+void Checker::checkPattern(Node* p, Type* t, bool multi) {
+    auto bad = [&](const std::string& msg) { err(p->loc, msg); patternError_ = true; };
+    if (t->isError()) { patternError_ = true; return; }
+    const std::string& k = p->str;
+    if (k == "_") return;
+    if (k == "lit") {
+        Node* lit = p->kids[0];
+        Type* lt = expr(lit);
+        if (lt != t) bad("this pattern has type `" + lt->str() + "` but the value matched here is `" + t->str() + "`");
+        return;
+    }
+    StructDecl* sd = t->kind == TK::Enum ? t->sd : nullptr;
+    if (k == "ident" && sd && sd->variantIndex(p->names[1]) >= 0) p->str = "variant";  // a bare unit-variant name
+    if (p->str == "ident") {
+        if (multi) { bad("a `|` pattern cannot bind names"); return; }
+        p->vars = {declare(p->names[1], t, false, p->loc)};
+        p->str = "bind";
+        return;
+    }
+    if (p->str == "ok" || p->str == "err") {
+        if (t->kind != TK::Result) { bad("`" + p->str + "(...)` patterns match results (`!T`), not `" + t->str() + "`"); return; }
+        if (p->kids.size() != 1) { bad("`" + p->str + "(...)` takes exactly one pattern"); return; }
+        Type* inner = p->str == "ok" ? t->elem : T.strT;
+        if (inner->kind == TK::Void) {
+            if (p->kids[0]->str != "_") bad("this result has no value; write `ok(_)`");
+            return;
+        }
+        checkPattern(p->kids[0], inner, multi);
+        return;
+    }
+    // enum variant
+    if (!sd) { bad("`" + p->names[1] + "` is not a variant of `" + t->str() + "`"); return; }
+    if (!p->names[0].empty() && p->names[0] != sd->name) {
+        bad("expected a variant of `" + sd->name + "`, found `" + p->names[0] + "::" + p->names[1] + "`");
+        return;
+    }
+    int vi = sd->variantIndex(p->names[1]);
+    if (vi < 0) {
+        std::vector<std::string> names;
+        for (auto& v : sd->variants) names.push_back(v.name);
+        Diag& d = err(p->loc, "`" + sd->name + "` has no variant named `" + p->names[1] + "`");
+        std::string sug = suggest(p->names[1], names);
+        if (!sug.empty()) d.notes.push_back("help: did you mean `" + sug + "`?");
+        patternError_ = true;
+        return;
+    }
+    Variant& var = sd->variants[vi];
+    if (p->kids.size() != var.types.size()) {
+        Diag& d = err(p->loc, "variant `" + sd->name + "::" + var.name + "` has " + std::to_string(var.types.size()) + " value" +
+                                  (var.types.size() == 1 ? "" : "s") + ", but the pattern names " + std::to_string(p->kids.size()));
+        if (p->kids.empty()) {
+            std::string us;
+            for (size_t i = 0; i < var.types.size(); i++) us += (i ? ", _" : "_");
+            d.notes.push_back("help: ignore the values with `" + var.name + "(" + us + ")`");
+        }
+        patternError_ = true;
+        return;
+    }
+    p->ival = vi;
+    for (size_t i = 0; i < p->kids.size(); i++) checkPattern(p->kids[i], var.types[i], multi);
+}
+
+static bool irrefutable(Node* p) { return p->str == "_" || p->str == "bind"; }
+
+// Cases of type `t` that none of `rows` matches (empty = exhaustive).
+// Nested payloads are analysed column by column for single-value variants
+// and results; multi-value variants need one row with only names/`_`.
+std::vector<std::string> Checker::missingPatterns(const std::vector<Node*>& rows, Type* t) {
+    for (Node* r : rows) if (irrefutable(r)) return {};
+    std::vector<std::string> out;
+    if (t->kind == TK::Enum) {
+        StructDecl* sd = t->sd;
+        for (size_t vi = 0; vi < sd->variants.size(); vi++) {
+            Variant& v = sd->variants[vi];
+            std::string name = sd->name + "::" + v.name;
+            std::vector<Node*> vr;
+            for (Node* r : rows) if (r->str == "variant" && r->ival == (int64_t)vi) vr.push_back(r);
+            if (vr.empty()) { out.push_back(v.types.empty() ? name : name + "(..)"); continue; }
+            if (v.types.empty()) continue;
+            bool full = false;
+            for (Node* r : vr) {
+                bool all = true;
+                for (Node* k : r->kids) all = all && irrefutable(k);
+                full = full || all;
+            }
+            if (full) continue;
+            if (v.types.size() == 1) {
+                std::vector<Node*> col;
+                for (Node* r : vr) col.push_back(r->kids[0]);
+                for (auto& m : missingPatterns(col, v.types[0])) out.push_back(name + "(" + m + ")");
+            } else {
+                out.push_back(name + "(..)");
+            }
+        }
+        return out;
+    }
+    if (t->kind == TK::Result) {
+        for (const char* side : {"ok", "err"}) {
+            std::vector<Node*> col;
+            for (Node* r : rows) if (r->str == side && !r->kids.empty()) col.push_back(r->kids[0]);
+            if (col.empty()) { out.push_back(std::string(side) + "(_)"); continue; }
+            Type* inner = std::string(side) == "ok" ? t->elem : T.strT;
+            if (inner->kind == TK::Void) continue;
+            for (auto& m : missingPatterns(col, inner)) out.push_back(std::string(side) + "(" + m + ")");
+        }
+        return out;
+    }
+    if (t->kind == TK::Bool) {
+        bool tr = false, fa = false;
+        for (Node* r : rows)
+            if (r->str == "lit" && r->kids[0]->kind == NK::BoolLit) (r->kids[0]->flag ? tr : fa) = true;
+        if (!tr) out.push_back("true");
+        if (!fa) out.push_back("false");
+        return out;
+    }
+    return {"_"};
+}
+
+Type* Checker::checkMatch(Node* m, Type* expected) {
+    Type* st = expr(m->kids[0]);
+    bool asExpr = m->flag;
+    bool okKind = st->kind == TK::Enum || st->kind == TK::Result || st->kind == TK::Int || st->kind == TK::Str ||
+                  st->kind == TK::Bool;
+    if (!okKind && !st->isError()) {
+        Diag& d = err(m->kids[0]->loc, "cannot `match` on a value of type `" + st->str() + "`");
+        if (st->kind == TK::Optional) d.notes.push_back("help: use `if let v = x { ... } else { ... }` for optionals");
+        else d.notes.push_back("help: `match` works on enums, results (`!T`), `int`, `str` and `bool`");
+    }
+    std::vector<Node*> rows;  // unguarded patterns, for the exhaustiveness check
+    bool catchAll = false;
+    std::vector<Node*> bodies;
+
+    for (Node* arm : m->pats) {
+        Node* guard = arm->kids[1];
+        bool unguarded = guard == nullptr;
+        if (catchAll) diag_.warning(arm->loc, "unreachable match arm", "an earlier arm already matches everything");
+        pushScope();
+        bool multi = arm->pats.size() > 1;
+        for (Node* p : arm->pats) {
+            checkPattern(p, st, multi);
+            if (unguarded) {
+                rows.push_back(p);
+                if (p->str == "_" || p->str == "bind") catchAll = true;
+            }
+        }
+        if (guard) {
+            Type* g = expr(arm->kids[1], T.boolT);
+            if (g->kind != TK::Bool && !g->isError()) mismatch(guard->loc, T.boolT, g, "a guard must be `bool`");
+        }
+        Node* body = arm->kids[0];
+        if (asExpr && body->kind == NK::Block) {
+            block(body, false);
+            if (!diverges(body)) {
+                Diag& d = err(body->loc, "this arm produces no value", "a block arm must leave the `match`");
+                d.notes.push_back("help: end the block with `return`, `break`, `continue` or `panic(...)`, or use a single expression");
+            }
+        } else if (asExpr) {
+            expr(arm->kids[0], expected);
+            bodies.push_back(arm->kids[0]);
+        } else if (body->kind == NK::Block) {
+            block(body, false);
+        } else {
+            stmt(body);
+        }
+        popScope();
+    }
+
+    if (okKind && !st->isError() && !patternError_) {
+        std::vector<std::string> missing = missingPatterns(rows, st);
+        if (!missing.empty()) {
+            std::string list;
+            for (size_t i = 0; i < missing.size() && i < 4; i++) list += (i ? ", `" : "`") + missing[i] + "`";
+            if (missing.size() > 4) list += " and " + std::to_string(missing.size() - 4) + " more";
+            Diag& d = err(m->loc, "non-exhaustive `match`: " + list + " not covered", "not every case is handled");
+            d.notes.push_back(st->kind == TK::Int || st->kind == TK::Str ? "help: add a catch-all arm `_ => ...`"
+                                                                           : "help: add an arm for each missing case, or a catch-all `_ => ...`");
+        }
+    }
+    patternError_ = false;
+    if (!asExpr) return T.voidT;
+
+    // the value of a match expression: one type for every arm
+    Type* rt = expected;
+    if (!rt) {
+        bool anyFloat = false, anyNil = false;
+        for (Node* b : bodies) {
+            if (!b->type || b->type->isError()) return T.errorT;
+            if (b->type->kind == TK::Float) anyFloat = true;
+            if (b->type->kind == TK::Nil) anyNil = true;
+            if (!rt && b->type->kind != TK::Nil) rt = b->type;
+        }
+        if (!rt) { err(m->loc, "cannot infer the type of this `match` (every arm is `nil`)"); return T.errorT; }
+        if (rt->kind == TK::Int && anyFloat) rt = T.floatT;
+        if (anyNil && rt->kind != TK::Optional) rt = T.optional(rt);
+    }
+    if (rt->kind == TK::Void) { err(m->loc, "the arms of this `match` do not produce a value"); return T.errorT; }
+    for (Node* arm : m->pats)
+        if (arm->kids[0]->kind != NK::Block) coerce(arm->kids[0], rt, "every arm of a `match` must have the same type");
+    return rt;
 }
 
 }  // namespace arc

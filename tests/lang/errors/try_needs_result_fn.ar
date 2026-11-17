@@ -1,0 +1,5 @@
+// ERROR: `?` passes the error on, but `run` returns `int`
+// ERROR: return a result (`-> !int`)
+fn load() -> !int { return 1 }
+fn run() -> int { return load()? }
+fn main() { println(run()) }

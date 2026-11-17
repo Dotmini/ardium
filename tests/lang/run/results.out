@@ -1,0 +1,11 @@
+[Config { name: "web", port: 80 }, Config { name: "db", port: 5432 }]
+error("invalid port '99999'")
+error("expected name=port, got 'oops'")
+loaded api 8080
+true false invalid port 'abc' 1 2
+port 443
+ok error("check failed") check failed
+8 nil
+[1, error("invalid port 'x'"), 7] true
+got 8000
+error: check failed

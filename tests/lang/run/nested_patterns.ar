@@ -1,0 +1,64 @@
+enum Cmd { Add(str, int), Remove(str), Show }
+
+enum Tree {
+    Leaf(int),
+    Node(Tree, Tree),
+}
+
+fn parse(line: str) -> !Cmd {
+    let p = line.split_whitespace()
+    if p.is_empty() { return err("empty command") }
+    return match p[0] {
+        "add" => ok(Cmd::Add(p[1], p[2].to_int() ?? 1)),
+        "rm" => ok(Cmd::Remove(p[1])),
+        "show" => ok(Cmd::Show),
+        _ => err(f"unknown command '{p[0]}'"),
+    }
+}
+
+fn shape(t: Tree) -> str {
+    return match t {
+        Leaf(0) => "zero leaf",
+        Leaf(n) if n < 0 => "negative leaf",
+        Leaf(_) => "leaf",
+        Node(Leaf(a), Leaf(b)) => f"pair {a}+{b}",
+        Node(Node(_, _), Leaf(_)) => "left-heavy",
+        Node(_, _) => "deep",
+    }
+}
+
+fn sum(t: Tree) -> int {
+    return match t {
+        Leaf(v) => v,
+        Node(l, r) => sum(l) + sum(r),
+    }
+}
+
+fn main() {
+    let mut stock: [str: int] = [:]
+    for line in ["add apple 5", "add pear 2", "add apple 1", "rm pear", "fly away", "", "show"] {
+        match parse(line) {
+            ok(Cmd::Add(item, n)) => stock[item] = stock.get_or(item, 0) + n,
+            ok(Cmd::Remove(item)) => { stock.remove(item) }
+            ok(Cmd::Show) => println(stock),
+            err("empty command") => println("(skipped empty line)"),
+            err(e) => println("error:", e),
+        }
+    }
+    let trees = [
+        Tree::Leaf(0),
+        Tree::Leaf(-3),
+        Tree::Leaf(9),
+        Tree::Node(Tree::Leaf(1), Tree::Leaf(2)),
+        Tree::Node(Tree::Node(Tree::Leaf(1), Tree::Leaf(1)), Tree::Leaf(5)),
+        Tree::Node(Tree::Leaf(1), Tree::Node(Tree::Leaf(2), Tree::Leaf(3))),
+    ]
+    for t in trees { println(shape(t), sum(t)) }
+    let r: !?int = parse_int("7")
+    let msg = match r {
+        ok(_) if false => "never",
+        ok(v) => f"value {v}",
+        err(e) => e,
+    }
+    println(msg)
+}
