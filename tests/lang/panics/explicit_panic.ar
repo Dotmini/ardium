@@ -1,0 +1,3 @@
+// PANIC: something went wrong: 42
+fn main() { let code = 42
+ panic(f"something went wrong: {code}") }

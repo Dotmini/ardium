@@ -1,0 +1,2 @@
+// ERROR: `err(...)` must be returned from a function returning `!T`
+fn main() { println(err("boom")) }

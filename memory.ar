@@ -1,0 +1,33 @@
+// ============================================================================
+//  ARDIUM / ARC - MEMORY & FFI INTEROP MODULE (memory.ar)
+// ============================================================================
+
+// Export ให้ C/Swift เรียกใช้ได้
+@export
+fn calculate_magic() {
+    return 42;
+}
+
+fn show() {
+    print("GLOBAL.Config = ");
+    println(GLOBAL.Config);
+}
+
+fn main() {
+    println("=================================================");
+    println("      ARDIUM MEMORY & FFI INTEROP MODULE         ");
+    println("=================================================");
+
+    // 1. Assign Tuple to Global Memory
+    GLOBAL(Config) = ("v1.0", 8080);
+
+    // 2. Display Global Memory via show()
+    show();
+
+    // 3. Call Exported Function
+    let magic = calculate_magic();
+    print("Exported calculate_magic() returned: ");
+    println(magic);
+
+    println("=================================================");
+}

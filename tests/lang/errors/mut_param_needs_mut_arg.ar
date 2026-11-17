@@ -1,0 +1,4 @@
+// ERROR: cannot pass `ys` to mutable parameter `xs`, as `ys` is not declared as mutable
+fn clear_all(mut xs: [int]) { xs.clear() }
+fn main() { let ys = [1]
+ clear_all(ys) }

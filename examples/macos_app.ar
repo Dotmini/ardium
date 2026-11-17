@@ -1,0 +1,22 @@
+// Arc Language - Native macOS GUI Application Example
+
+import "CoreUI"
+
+fn on_button_click() {
+    println("⚡️ Button Action Triggered in Arc App!");
+}
+
+fn build_ui() {
+    VStack {
+        Title("Arc Studio App")
+        Subtitle("Native macOS & Metal Acceleration")
+        Spacer(20)
+        Button("Click to Execute", on_button_click)
+    }
+}
+
+fn main() {
+    println("🚀 Launching Arc macOS Desktop Application...");
+    App("Arc Studio", build_ui);
+    return 0;
+}

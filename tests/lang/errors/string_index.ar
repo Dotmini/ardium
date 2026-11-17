@@ -1,0 +1,3 @@
+// ERROR: strings cannot be indexed by position
+fn main() { let s = "abc"
+ println(s[0]) }

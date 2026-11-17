@@ -56,6 +56,7 @@ namespace Ardium::Titan::Compiler {
         else if (op == "-") emit(prog, OP_SUB);
         else if (op == "*") emit(prog, OP_MUL);
         else if (op == "/") emit(prog, OP_DIV);
+        else if (op == "%") emit(prog, OP_MOD);
         else if (op == "==") emit(prog, OP_EQ);
         else if (op == "!=") emit(prog, OP_NE);
         else if (op == "<") emit(prog, OP_LT);
@@ -69,6 +70,12 @@ namespace Ardium::Titan::Compiler {
     }
     void VariableDecl::codegen(Program& prog) {
         if (initializer) initializer->codegen(prog);
+        emit(prog, OP_STORE_GLOBAL);
+        emit32(prog, addString(prog, name));
+    }
+
+    void AssignmentStmt::codegen(Program& prog) {
+        if (value) value->codegen(prog);
         emit(prog, OP_STORE_GLOBAL);
         emit32(prog, addString(prog, name));
     }
@@ -138,10 +145,10 @@ namespace Ardium::Titan::Compiler {
         emit32(prog, addString(prog, label));
     }
 
-    std::string PrintStmt::toString(int indent) const { return indentStr(indent) + "println"; }
+    std::string PrintStmt::toString(int indent) const { return indentStr(indent) + (isNewline ? "println(...)" : "print(...)"); }
     void PrintStmt::codegen(Program& prog) {
         if (expr) expr->codegen(prog);
-        emit(prog, OP_PRINT);
+        emit(prog, isNewline ? OP_PRINT : OP_PRINT_RAW);
     }
 
     std::string FunctionDecl::toString(int indent) const { return indentStr(indent) + "fn " + name; }
@@ -162,85 +169,96 @@ namespace Ardium::Titan::Compiler {
 
     enum TokenType {
         TOK_EOF, TOK_ID, TOK_INT, TOK_STRING_LIT,
-        TOK_LET, TOK_FN, TOK_RETURN, // Added TOK_RETURN
+        TOK_LET, TOK_FN, TOK_RETURN,
         TOK_VCLASS, TOK_HCLASS, TOK_ZCLASS, TOK_BUTTON, TOK_PRINT,
         TOK_IF, TOK_ELIF, TOK_ELSE, TOK_WHILE,
         TOK_LBRACE, TOK_RBRACE, TOK_LPAREN, TOK_RPAREN, TOK_EQUALS, TOK_SEMICOLON, TOK_COLON, TOK_COMMA, TOK_DOT, TOK_AT,
-        TOK_PLUS, TOK_MINUS, TOK_STAR, TOK_SLASH, TOK_ARROW, // Added TOK_ARROW
+        TOK_PLUS, TOK_MINUS, TOK_STAR, TOK_SLASH, TOK_MOD, TOK_ARROW,
         TOK_EQ_EQ, TOK_NOT_EQ, TOK_LT, TOK_GT, TOK_LE, TOK_GE
     };
 
-    struct Token { TokenType type; std::string text; };
+    struct Token { TokenType type; std::string text; int line = 1; int col = 1; };
 
     class Lexer {
         std::string src; size_t pos = 0;
+        int curLine = 1;
+        int curCol = 1;
     public:
         Lexer(const std::string& s) : src(s) {}
         char peek() { return pos < src.size() ? src[pos] : 0; }
         char peekNext() { return pos + 1 < src.size() ? src[pos+1] : 0; }
-        char advance() { return pos < src.size() ? src[pos++] : 0; }
+        char advance() {
+            if (pos >= src.size()) return 0;
+            char c = src[pos++];
+            if (c == '\n') { curLine++; curCol = 1; }
+            else { curCol++; }
+            return c;
+        }
         
         Token next() {
             while (peek() && isspace(peek())) advance();
-            if (pos >= src.size()) return {TOK_EOF, ""};
+            if (pos >= src.size()) return {TOK_EOF, "", curLine, curCol};
             
+            int tokLine = curLine;
+            int tokCol = curCol;
             char c = peek();
             if (isalpha(c) || c == '_') {
                 std::string text;
                 while (isalnum(peek()) || peek() == '_') text += advance();
-                if (text == "let") return {TOK_LET, text};
-                if (text == "fn") return {TOK_FN, text};
-                if (text == "return") return {TOK_RETURN, text};
-                if (text == "if") return {TOK_IF, text};
-                if (text == "elif") return {TOK_ELIF, text};
-                if (text == "else") return {TOK_ELSE, text};
-                if (text == "while") return {TOK_WHILE, text};
-                if (text == "VClass" || text == "VStack") return {TOK_VCLASS, text};
-                if (text == "HClass" || text == "HStack") return {TOK_HCLASS, text};
-                if (text == "ZClass" || text == "ZStack") return {TOK_ZCLASS, text};
-                if (text == "Button") return {TOK_BUTTON, text};
-                if (text == "println") return {TOK_PRINT, text};
-                if (text == "print") return {TOK_PRINT, text};
-                return {TOK_ID, text};
+                if (text == "let") return {TOK_LET, text, tokLine, tokCol};
+                if (text == "fn") return {TOK_FN, text, tokLine, tokCol};
+                if (text == "return") return {TOK_RETURN, text, tokLine, tokCol};
+                if (text == "if") return {TOK_IF, text, tokLine, tokCol};
+                if (text == "elif") return {TOK_ELIF, text, tokLine, tokCol};
+                if (text == "else") return {TOK_ELSE, text, tokLine, tokCol};
+                if (text == "while") return {TOK_WHILE, text, tokLine, tokCol};
+                if (text == "VClass" || text == "VStack") return {TOK_VCLASS, text, tokLine, tokCol};
+                if (text == "HClass" || text == "HStack") return {TOK_HCLASS, text, tokLine, tokCol};
+                if (text == "ZClass" || text == "ZStack") return {TOK_ZCLASS, text, tokLine, tokCol};
+                if (text == "Button") return {TOK_BUTTON, text, tokLine, tokCol};
+                if (text == "println") return {TOK_PRINT, text, tokLine, tokCol};
+                if (text == "print") return {TOK_PRINT, text, tokLine, tokCol};
+                return {TOK_ID, text, tokLine, tokCol};
             }
             if (isdigit(c)) {
                 std::string text;
                 while (isdigit(peek())) text += advance();
-                return {TOK_INT, text};
+                return {TOK_INT, text, tokLine, tokCol};
             }
             if (c == '-') {
-                if (peekNext() == '>') { advance(); advance(); return {TOK_ARROW, "->"}; }
-                advance(); return {TOK_MINUS, "-"};
+                if (peekNext() == '>') { advance(); advance(); return {TOK_ARROW, "->", tokLine, tokCol}; }
+                advance(); return {TOK_MINUS, "-", tokLine, tokCol};
             }
             if (c == '/') {
                 if (peekNext() == '/') {
                     while (peek() != '\n' && peek() != 0) advance();
                     return next();
                 } else {
-                    advance(); return {TOK_SLASH, "/"};
+                    advance(); return {TOK_SLASH, "/", tokLine, tokCol};
                 }
             }
-            if (c == '+') { advance(); return {TOK_PLUS, "+"}; }
-            if (c == '*') { advance(); return {TOK_STAR, "*"}; }
+            if (c == '+') { advance(); return {TOK_PLUS, "+", tokLine, tokCol}; }
+            if (c == '*') { advance(); return {TOK_STAR, "*", tokLine, tokCol}; }
+            if (c == '%') { advance(); return {TOK_MOD, "%", tokLine, tokCol}; }
             
             if (c == '=') { 
                 advance(); 
-                if (peek() == '=') { advance(); return {TOK_EQ_EQ, "=="}; }
-                return {TOK_EQUALS, "="}; 
+                if (peek() == '=') { advance(); return {TOK_EQ_EQ, "==", tokLine, tokCol}; }
+                return {TOK_EQUALS, "=", tokLine, tokCol}; 
             }
             if (c == '!') {
                 advance();
-                if (peek() == '=') { advance(); return {TOK_NOT_EQ, "!="}; }
+                if (peek() == '=') { advance(); return {TOK_NOT_EQ, "!=", tokLine, tokCol}; }
             }
             if (c == '<') {
                 advance();
-                if (peek() == '=') { advance(); return {TOK_LE, "<="}; }
-                return {TOK_LT, "<"};
+                if (peek() == '=') { advance(); return {TOK_LE, "<=", tokLine, tokCol}; }
+                return {TOK_LT, "<", tokLine, tokCol};
             }
             if (c == '>') {
                 advance();
-                if (peek() == '=') { advance(); return {TOK_GE, ">="}; }
-                return {TOK_GT, ">"};
+                if (peek() == '=') { advance(); return {TOK_GE, ">=", tokLine, tokCol}; }
+                return {TOK_GT, ">", tokLine, tokCol};
             }
 
             if (c == '"') {
@@ -258,17 +276,17 @@ namespace Ardium::Titan::Compiler {
                         text += advance();
                     }
                 }
-                advance(); return {TOK_STRING_LIT, text};
+                advance(); return {TOK_STRING_LIT, text, tokLine, tokCol};
             }
-            if (c == '{') { advance(); return {TOK_LBRACE, "{"}; }
-            if (c == '}') { advance(); return {TOK_RBRACE, "}"}; }
-            if (c == '(') { advance(); return {TOK_LPAREN, "("}; }
-            if (c == ')') { advance(); return {TOK_RPAREN, ")"}; }
-            if (c == ';') { advance(); return {TOK_SEMICOLON, ";"}; }
-            if (c == ':') { advance(); return {TOK_COLON, ":"}; }
-            if (c == ',') { advance(); return {TOK_COMMA, ","}; }
-            if (c == '.') { advance(); return {TOK_DOT, "."}; }
-            if (c == '@') { advance(); return {TOK_AT, "@"}; }
+            if (c == '{') { advance(); return {TOK_LBRACE, "{", tokLine, tokCol}; }
+            if (c == '}') { advance(); return {TOK_RBRACE, "}", tokLine, tokCol}; }
+            if (c == '(') { advance(); return {TOK_LPAREN, "(", tokLine, tokCol}; }
+            if (c == ')') { advance(); return {TOK_RPAREN, ")", tokLine, tokCol}; }
+            if (c == ';') { advance(); return {TOK_SEMICOLON, ";", tokLine, tokCol}; }
+            if (c == ':') { advance(); return {TOK_COLON, ":", tokLine, tokCol}; }
+            if (c == ',') { advance(); return {TOK_COMMA, ",", tokLine, tokCol}; }
+            if (c == '.') { advance(); return {TOK_DOT, ".", tokLine, tokCol}; }
+            if (c == '@') { advance(); return {TOK_AT, "@", tokLine, tokCol}; }
             
             advance(); return next();
         }
@@ -310,35 +328,28 @@ namespace Ardium::Titan::Compiler {
                 std::string n = current.text;
                 consume(TOK_ID);
                 
+                // GLOBAL.member access
+                if (current.type == TOK_DOT) {
+                    consume(TOK_DOT);
+                    std::string member = current.text;
+                    consume(TOK_ID);
+                    if (n == "GLOBAL") {
+                        return std::make_shared<VarRef>(member);
+                    }
+                    return std::make_shared<VarRef>(n + "_" + member);
+                }
+
                 // Function Call?
                 if (current.type == TOK_LPAREN) {
                     consume(TOK_LPAREN);
                     std::vector<std::shared_ptr<Expression>> args;
                     if (current.type != TOK_RPAREN) {
                         args.push_back(parseExpression());
-                        // Support multiple args later if needed
-                        while (current.type == TOK_ID) { // Hacky check for comma or just implicit
-                             // For now simple single arg or weird parsing
-                             // Let's rely on comma if we had it, or just parse next expression?
-                             // Parser doesn't have COMMA token yet.
-                             // Let's assume single arg or logic for now to pass tests.
-                             // SynTest has calculate_sum(10, 5). We need comma support!
-                        }
-                        if (current.type == TOK_INT || current.type == TOK_ID) { 
-                             // Wait, we need a comma token.
+                        while (current.type == TOK_COMMA) {
+                            consume(TOK_COMMA);
+                            args.push_back(parseExpression());
                         }
                     }
-                    // Since we don't have comma token in Lexer (oops), let's hack:
-                    // Just parse expressions until RPAREN?
-                    // This works if expressions clearly end.
-                    // But 10 5 is invalid expression usually.
-                    // Let's add comma support to Lexer quickly? 
-                    // Or just use a loop that tries to parse expressions.
-                    
-                    // Hack for SynTest: calculate_sum(10, 5)
-                    // 10 is parsed. Then we see comma.
-                    // Lexer treats comma as... nothing? unexpected char?
-                    
                     consume(TOK_RPAREN);
                     return std::make_shared<CallExpr>(n, args);
                 }
@@ -348,28 +359,86 @@ namespace Ardium::Titan::Compiler {
             if (current.type == TOK_LPAREN) {
                 consume(TOK_LPAREN);
                 auto expr = parseExpression();
+                if (current.type == TOK_COMMA) {
+                    // Tuple expression: concatenate as string representation (e.g. ("v1.0", 8080))
+                    std::vector<std::shared_ptr<Expression>> tupleElements;
+                    tupleElements.push_back(expr);
+                    while (current.type == TOK_COMMA) {
+                        consume(TOK_COMMA);
+                        tupleElements.push_back(parseExpression());
+                    }
+                    consume(TOK_RPAREN);
+                    std::shared_ptr<Expression> resultExpr = std::make_shared<StringLiteral>("(");
+                    for (size_t i = 0; i < tupleElements.size(); ++i) {
+                        if (i > 0) {
+                            resultExpr = std::make_shared<BinaryOp>("+", resultExpr, std::make_shared<StringLiteral>(", "));
+                        }
+                        resultExpr = std::make_shared<BinaryOp>("+", resultExpr, tupleElements[i]);
+                    }
+                    resultExpr = std::make_shared<BinaryOp>("+", resultExpr, std::make_shared<StringLiteral>(")"));
+                    return resultExpr;
+                }
                 consume(TOK_RPAREN);
                 return expr;
             }
             return nullptr;
         }
 
-        std::shared_ptr<Expression> parseExpression() {
+        std::shared_ptr<Expression> parseMultiplicative() {
             auto left = parsePrimary();
             if (!left) return nullptr;
 
-            while (current.type == TOK_PLUS || current.type == TOK_MINUS || 
-                   current.type == TOK_STAR || current.type == TOK_SLASH ||
-                   current.type == TOK_EQ_EQ || current.type == TOK_NOT_EQ ||
-                   current.type == TOK_LT || current.type == TOK_GT ||
-                   current.type == TOK_LE || current.type == TOK_GE) {
-                
+            while (current.type == TOK_STAR || current.type == TOK_SLASH || current.type == TOK_MOD) {
                 std::string op = current.text;
                 consume(current.type);
                 auto right = parsePrimary();
                 left = std::make_shared<BinaryOp>(op, left, right);
             }
             return left;
+        }
+
+        std::shared_ptr<Expression> parseAdditive() {
+            auto left = parseMultiplicative();
+            if (!left) return nullptr;
+
+            while (current.type == TOK_PLUS || current.type == TOK_MINUS) {
+                std::string op = current.text;
+                consume(current.type);
+                auto right = parseMultiplicative();
+                left = std::make_shared<BinaryOp>(op, left, right);
+            }
+            return left;
+        }
+
+        std::shared_ptr<Expression> parseRelational() {
+            auto left = parseAdditive();
+            if (!left) return nullptr;
+
+            while (current.type == TOK_LT || current.type == TOK_GT ||
+                   current.type == TOK_LE || current.type == TOK_GE) {
+                std::string op = current.text;
+                consume(current.type);
+                auto right = parseAdditive();
+                left = std::make_shared<BinaryOp>(op, left, right);
+            }
+            return left;
+        }
+
+        std::shared_ptr<Expression> parseEquality() {
+            auto left = parseRelational();
+            if (!left) return nullptr;
+
+            while (current.type == TOK_EQ_EQ || current.type == TOK_NOT_EQ) {
+                std::string op = current.text;
+                consume(current.type);
+                auto right = parseRelational();
+                left = std::make_shared<BinaryOp>(op, left, right);
+            }
+            return left;
+        }
+
+        std::shared_ptr<Expression> parseExpression() {
+            return parseEquality();
         }
 
         std::shared_ptr<Block> parseBlock() {
@@ -392,28 +461,9 @@ namespace Ardium::Titan::Compiler {
             
             std::shared_ptr<ASTNode> elseNode = nullptr;
             if (current.type == TOK_ELIF) {
-                // Recursive call for elif as if it's a new if (simplified)
-                // Actually elif is `else if`, so we parse it as an IfStmt
                 consume(TOK_ELIF);
                 auto elifCond = parseExpression();
                 auto elifBlock = parseBlock();
-                // We handle elif chains by putting them in the 'else' slot
-                // But wait, the structure expects elseBlock to be ASTNode.
-                // We can recurse to parse the rest of the chain.
-                // Re-using parseIf logic but starting from condition?
-                // Let's manually construct the IfStmt for the elif part.
-                
-                // Recursively parse the rest of the chain (elif/else)
-                // We need to peek ahead? No, just recursion.
-                // But parseIf consumes TOK_IF.
-                // Let's refactor: parseIfTail?
-                
-                // Hack: If we see ELIF, we create a new IfStmt and put it as the elseBlock of current.
-                // But `parseIf` expects IF. 
-                // Let's create `parseIfRest`?
-                
-                // Simple approach: parseIf consumes IF.
-                // For ELIF, we manually create the node.
                 elseNode = std::make_shared<IfStmt>(elifCond, elifBlock, parseElseOrElif());
             } else if (current.type == TOK_ELSE) {
                 consume(TOK_ELSE);
@@ -448,12 +498,11 @@ namespace Ardium::Titan::Compiler {
             if (current.type == TOK_LET) {
                 consume(TOK_LET);
                 bool isMut = false;
-                if (current.text == "mut") { consume(TOK_ID); isMut = true; } // Hacky check for mut
+                if (current.text == "mut") { consume(TOK_ID); isMut = true; }
                 
                 std::string name = current.text;
                 consume(TOK_ID);
                 
-                // Optional type annotation ignored for now
                 if (current.type == TOK_COLON) { consume(TOK_COLON); consume(TOK_ID); }
 
                 consume(TOK_EQUALS);
@@ -471,20 +520,35 @@ namespace Ardium::Titan::Compiler {
                 return std::make_shared<ReturnStmt>(expr);
             }
             if (current.type == TOK_PRINT) {
+                bool isPrintln = (current.text == "println");
                 consume(TOK_PRINT);
                 consume(TOK_LPAREN);
                 auto expr = parseExpression();
                 consume(TOK_RPAREN);
-                consume(TOK_SEMICOLON);
-                return std::make_shared<PrintStmt>(expr);
+                if (current.type == TOK_SEMICOLON) consume(TOK_SEMICOLON);
+                return std::make_shared<PrintStmt>(expr, isPrintln);
             }
             if (current.type == TOK_IF) return parseIf();
             if (current.type == TOK_WHILE) return parseWhile();
             
             if (current.type == TOK_ID) {
-                // Assignment or Call?
                 std::string name = current.text;
                 consume(TOK_ID);
+                
+                // GLOBAL(Config) = ("v1.0", 8080);
+                if (name == "GLOBAL" && current.type == TOK_LPAREN) {
+                    consume(TOK_LPAREN);
+                    std::string key = current.text;
+                    consume(TOK_ID);
+                    consume(TOK_RPAREN);
+                    if (current.type == TOK_EQUALS) {
+                        consume(TOK_EQUALS);
+                        auto expr = parseExpression();
+                        consume(TOK_SEMICOLON);
+                        return std::make_shared<VariableDecl>(key, true, expr);
+                    }
+                }
+
                 if (current.type == TOK_DOT) {
                     // GLOBAL.ID access
                     if (name == "GLOBAL") {
@@ -495,7 +559,7 @@ namespace Ardium::Titan::Compiler {
                             consume(TOK_EQUALS);
                             auto expr = parseExpression();
                             consume(TOK_SEMICOLON);
-                            return std::make_shared<VariableDecl>(member, true, expr); // Re-use VarDecl for GLOBAL store
+                            return std::make_shared<VariableDecl>(member, true, expr);
                         }
                     }
                 }
@@ -503,12 +567,26 @@ namespace Ardium::Titan::Compiler {
                     consume(TOK_EQUALS);
                     auto expr = parseExpression();
                     consume(TOK_SEMICOLON);
-                    return std::make_shared<VariableDecl>(name, true, expr); // Re-use VarDecl for assignment
+                    return std::make_shared<AssignmentStmt>(name, expr);
+                }
+                if (current.type == TOK_LPAREN) {
+                    // Direct function call statement: show();
+                    consume(TOK_LPAREN);
+                    std::vector<std::shared_ptr<Expression>> args;
+                    if (current.type != TOK_RPAREN) {
+                        args.push_back(parseExpression());
+                        while (current.type == TOK_COMMA) {
+                            consume(TOK_COMMA);
+                            args.push_back(parseExpression());
+                        }
+                    }
+                    consume(TOK_RPAREN);
+                    consume(TOK_SEMICOLON);
+                    return std::make_shared<CallExpr>(name, args);
                 }
             }
 
             if (current.type == TOK_VCLASS || current.type == TOK_HCLASS || current.type == TOK_ZCLASS) {
-                // ... (Existing UI parsing code)
                 std::string type = current.text;
                 consume(current.type);
                 if (current.type == TOK_COLON) consume(TOK_COLON);
@@ -532,13 +610,37 @@ namespace Ardium::Titan::Compiler {
 
         void parse(ProgramAST& ast) {
             while (current.type != TOK_EOF) {
+                if (current.type == TOK_AT) {
+                    consume(TOK_AT);
+                    std::string attr = current.text;
+                    consume(TOK_ID);
+                    if (attr == "export") {
+                        // @export fn ... -> continue to fn
+                    } else if (current.type == TOK_LPAREN) {
+                        consume(TOK_LPAREN);
+                        std::string handlerName = current.text;
+                        consume(TOK_ID);
+                        consume(TOK_RPAREN);
+                        
+                        consume(TOK_LBRACE);
+                        auto fn = std::make_shared<FunctionDecl>("__handler_" + handlerName);
+                        while (current.type != TOK_RBRACE && current.type != TOK_EOF) {
+                            auto stmt = parseStmt();
+                            if (stmt) fn->body.push_back(stmt);
+                            else current = lexer.next();
+                        }
+                        consume(TOK_RBRACE);
+                        ast.nodes.push_back(fn);
+                        continue;
+                    }
+                }
+
                 if (current.type == TOK_FN) {
                     consume(TOK_FN);
                     std::string name = current.text;
                     consume(TOK_ID);
                     if (current.type == TOK_LPAREN) {
                         consume(TOK_LPAREN);
-                        // args ignored for now
                         consume(TOK_RPAREN);
                     }
                     
@@ -559,27 +661,6 @@ namespace Ardium::Titan::Compiler {
                     }
                     consume(TOK_RBRACE);
                     ast.nodes.push_back(fn);
-                } else if (current.type == TOK_AT) {
-                    consume(TOK_AT);
-                    // Consume until '('
-                    while(current.type != TOK_LPAREN && current.type != TOK_EOF) current = lexer.next();
-                    
-                    consume(TOK_LPAREN);
-                    std::string handlerName = current.text;
-                    consume(TOK_ID);
-                    consume(TOK_RPAREN);
-                    
-                    // Parse body
-                    consume(TOK_LBRACE);
-                    auto fn = std::make_shared<FunctionDecl>("__handler_" + handlerName);
-                    while (current.type != TOK_RBRACE && current.type != TOK_EOF) {
-                        auto stmt = parseStmt();
-                        if (stmt) fn->body.push_back(stmt);
-                        else current = lexer.next();
-                    }
-                    consume(TOK_RBRACE);
-                    ast.nodes.push_back(fn);
-
                 } else {
                     auto stmt = parseStmt();
                     if (stmt) ast.nodes.push_back(stmt);
@@ -595,15 +676,174 @@ namespace Ardium::Titan::Compiler {
             ProgramAST ast;
             parser.parse(ast);
             
-            // Bootstrap: Jump to main
+            // 1. Initialize top-level variables & statements first
+            for (auto& node : ast.nodes) {
+                if (dynamic_cast<VariableDecl*>(node.get())) {
+                    node->codegen(outProgram);
+                }
+            }
+
+            // 2. Bootstrap: Jump to main
             emit(outProgram, OP_CALL); 
             emit32(outProgram, addString(outProgram, "main"));
             emit(outProgram, OP_HALT); // Stop after main returns
 
-            // Codegen functions
+            // 3. Codegen function bodies
             for (auto& node : ast.nodes) {
-                node->codegen(outProgram);
+                if (!dynamic_cast<VariableDecl*>(node.get())) {
+                    node->codegen(outProgram);
+                }
             }
+            return true;
+        } catch (...) {
+            return false;
+        }
+    }
+
+    static std::string sanitizeIdent(const std::string& n) {
+        return "ar_" + n;
+    }
+
+    static std::string exprToCpp(const std::shared_ptr<Expression>& expr) {
+        if (!expr) return "0";
+        if (auto lit = std::dynamic_pointer_cast<IntLiteral>(expr)) {
+            return std::to_string(lit->value);
+        }
+        if (auto slit = std::dynamic_pointer_cast<StringLiteral>(expr)) {
+            return "std::string(\"" + slit->value + "\")";
+        }
+        if (auto vref = std::dynamic_pointer_cast<VarRef>(expr)) {
+            return sanitizeIdent(vref->name);
+        }
+        if (auto bin = std::dynamic_pointer_cast<BinaryOp>(expr)) {
+            return "(" + exprToCpp(bin->left) + " " + bin->op + " " + exprToCpp(bin->right) + ")";
+        }
+        if (auto call = std::dynamic_pointer_cast<CallExpr>(expr)) {
+            std::string s = call->callee + "(";
+            for (size_t i = 0; i < call->args.size(); ++i) {
+                if (i > 0) s += ", ";
+                s += exprToCpp(call->args[i]);
+            }
+            s += ")";
+            return s;
+        }
+        return "0";
+    }
+
+    static void stmtToCpp(const std::shared_ptr<ASTNode>& node, std::stringstream& ss, int indent) {
+        std::string ind(indent * 4, ' ');
+        if (!node) return;
+        if (auto vdecl = std::dynamic_pointer_cast<VariableDecl>(node)) {
+            if (indent == 0) {
+                ss << "int64_t " << sanitizeIdent(vdecl->name) << " = " << (vdecl->initializer ? exprToCpp(vdecl->initializer) : "0") << ";\n";
+            } else {
+                ss << ind << "int64_t " << sanitizeIdent(vdecl->name) << " = " << (vdecl->initializer ? exprToCpp(vdecl->initializer) : "0") << ";\n";
+            }
+            return;
+        }
+        if (auto asgn = std::dynamic_pointer_cast<AssignmentStmt>(node)) {
+            ss << ind << sanitizeIdent(asgn->name) << " = " << exprToCpp(asgn->value) << ";\n";
+            return;
+        }
+        if (auto ret = std::dynamic_pointer_cast<ReturnStmt>(node)) {
+            ss << ind << "return " << (ret->expr ? exprToCpp(ret->expr) : "") << ";\n";
+            return;
+        }
+        if (auto prn = std::dynamic_pointer_cast<PrintStmt>(node)) {
+            ss << ind << "std::cout << " << (prn->expr ? exprToCpp(prn->expr) : "\"\"") << (prn->isNewline ? " << std::endl;\n" : ";\n");
+            return;
+        }
+        if (auto whl = std::dynamic_pointer_cast<WhileStmt>(node)) {
+            ss << ind << "while (" << exprToCpp(whl->condition) << ") {\n";
+            if (whl->body) {
+                for (auto& s : whl->body->statements) {
+                    stmtToCpp(s, ss, indent + 1);
+                }
+            }
+            ss << ind << "}\n";
+            return;
+        }
+        if (auto ifs = std::dynamic_pointer_cast<IfStmt>(node)) {
+            ss << ind << "if (" << exprToCpp(ifs->condition) << ") {\n";
+            if (ifs->thenBlock) {
+                for (auto& s : ifs->thenBlock->statements) {
+                    stmtToCpp(s, ss, indent + 1);
+                }
+            }
+            if (ifs->elseBlock) {
+                ss << ind << "} else {\n";
+                if (auto elif = std::dynamic_pointer_cast<IfStmt>(ifs->elseBlock)) {
+                    stmtToCpp(elif, ss, indent + 1);
+                } else if (auto blk = std::dynamic_pointer_cast<Block>(ifs->elseBlock)) {
+                    for (auto& s : blk->statements) {
+                        stmtToCpp(s, ss, indent + 1);
+                    }
+                }
+                ss << ind << "}\n";
+            } else {
+                ss << ind << "}\n";
+            }
+            return;
+        }
+        if (auto call = std::dynamic_pointer_cast<CallExpr>(node)) {
+            if (call->callee == "println") {
+                ss << ind << "std::cout << " << (call->args.empty() ? "\"\"" : exprToCpp(call->args[0])) << " << std::endl;\n";
+            } else if (call->callee == "print") {
+                ss << ind << "std::cout << " << (call->args.empty() ? "\"\"" : exprToCpp(call->args[0])) << ";\n";
+            } else {
+                ss << ind << exprToCpp(call) << ";\n";
+            }
+            return;
+        }
+    }
+
+    bool Compiler::CompileToNativeCpp(const std::string& source, std::string& outCpp) {
+        try {
+            ParserImpl parser(source);
+            ProgramAST ast;
+            parser.parse(ast);
+
+            std::stringstream ss;
+            ss << "#include <iostream>\n#include <string>\n#include <cstdint>\n\n";
+
+            // 1. Top-level variables
+            for (auto& node : ast.nodes) {
+                if (dynamic_cast<VariableDecl*>(node.get())) {
+                    stmtToCpp(node, ss, 0);
+                }
+            }
+            ss << "\n";
+
+            // 2. Forward function declarations
+            for (auto& node : ast.nodes) {
+                if (auto fn = std::dynamic_pointer_cast<FunctionDecl>(node)) {
+                    if (fn->name != "main") {
+                        ss << "int64_t " << fn->name << "();\n";
+                    }
+                }
+            }
+            ss << "\n";
+
+            // 3. Function implementations
+            for (auto& node : ast.nodes) {
+                if (auto fn = std::dynamic_pointer_cast<FunctionDecl>(node)) {
+                    if (fn->name == "main") {
+                        ss << "int main() {\n";
+                    } else {
+                        ss << "int64_t " << fn->name << "() {\n";
+                    }
+                    for (auto& s : fn->body) {
+                        stmtToCpp(s, ss, 1);
+                    }
+                    if (fn->name == "main") {
+                        ss << "    return 0;\n";
+                    } else {
+                        ss << "    return 0;\n";
+                    }
+                    ss << "}\n\n";
+                }
+            }
+            outCpp = ss.str();
             return true;
         } catch (...) {
             return false;

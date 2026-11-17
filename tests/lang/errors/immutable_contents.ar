@@ -1,0 +1,6 @@
+// ERROR: cannot call `push` on `xs`, as `xs` is not declared as mutable
+fn main() {
+    let xs = [1, 2]
+    xs.push(3)
+    println(xs)
+}

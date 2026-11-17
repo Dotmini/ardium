@@ -1,0 +1,19 @@
+12 12 false true
+HELLO, WORLD hello, world
+true false true true
+4 -1
+Hello World Hello World
+padded|
+["a", "b", "", "c"] ["one", "two", "three"]
+["line1", "line2", "line3"]
+ababab x+y+z
+a/b/c
+true true true true
+72 65 B ฿
+18 6 6
+h .é .l .l .o .
+tab	quote" backslash\ unicode 😀
+01234
+421.5true[1, 2]
+42 nil 7 -3 2.5
+99 -1.0

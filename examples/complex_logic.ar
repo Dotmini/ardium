@@ -1,0 +1,151 @@
+// ============================================================================
+//  ARDIUM / ARC LANGUAGE - ADVANCED ALGORITHMIC LOGIC SUITE (100% PURE AR)
+// ============================================================================
+
+fn main() {
+    println("=================================================");
+    println("   ARDIUM ADVANCED ALGORITHMIC COMPUTATION       ");
+    println("=================================================");
+
+    // ------------------------------------------------------------------------
+    // [1] Number Theory: Prime Sieve & Primality Testing (1 to 50)
+    // ------------------------------------------------------------------------
+    println("\n[1] Number Theory: Primality & Prime Search (1 to 50)...");
+    let mut num = 2;
+    let mut prime_count = 0;
+    
+    while num <= 50 {
+        let mut is_prime = 1;
+        let mut divisor = 2;
+        
+        while divisor * divisor <= num {
+            if num % divisor == 0 {
+                is_prime = 0;
+            }
+            divisor = divisor + 1;
+        }
+        
+        if is_prime == 1 {
+            print("  Found Prime: ");
+            println(num);
+            prime_count = prime_count + 1;
+        }
+        num = num + 1;
+    }
+    print("  Total Primes Found in [2, 50]: ");
+    println(prime_count);
+
+    // ------------------------------------------------------------------------
+    // [2] Cryptography: Modular Exponentiation (Fast Binary Exponentiation)
+    // ------------------------------------------------------------------------
+    println("\n[2] Cryptography: Fast Modular Exponentiation (Binary Exponentiation)...");
+    let mut base = 7;
+    let mut exponent = 256;
+    let mut modulus = 1000000007;
+    
+    println("  Computing: (7 ^ 256) mod 1000000007");
+    
+    let mut result = 1;
+    base = base % modulus;
+    
+    while exponent > 0 {
+        if exponent % 2 == 1 {
+            result = (result * base) % modulus;
+        }
+        exponent = exponent / 2;
+        base = (base * base) % modulus;
+    }
+    
+    print("  Result = ");
+    println(result);
+
+    // ------------------------------------------------------------------------
+    // [3] Mathematics: Newton-Raphson Integer Square Root Approximation
+    // ------------------------------------------------------------------------
+    println("\n[3] Mathematics: Newton-Raphson Integer Square Root...");
+    let target = 987654321;
+    let mut x = target;
+    let mut y = (x + 1) / 2;
+    
+    while y < x {
+        x = y;
+        y = (x + target / x) / 2;
+    }
+    
+    print("  Integer sqrt(987654321) = ");
+    println(x);
+    print("  Verification: x * x = ");
+    println(x * x);
+
+    // ------------------------------------------------------------------------
+    // [4] Dynamic Programming: Fibonacci Sequence Generation
+    // ------------------------------------------------------------------------
+    println("\n[4] Dynamic Programming: Fibonacci (First 20 Numbers)...");
+    let mut f0 = 0;
+    let mut f1 = 1;
+    let mut step = 0;
+    
+    while step < 20 {
+        print("  F(");
+        print(step);
+        print(") = ");
+        println(f0);
+        
+        let next_f = f0 + f1;
+        f0 = f1;
+        f1 = next_f;
+        step = step + 1;
+    }
+
+    // ------------------------------------------------------------------------
+    // [5] Chaos Theory: Collatz Conjecture (3N + 1) Trajectory Analysis
+    // ------------------------------------------------------------------------
+    println("\n[5] Chaos Theory: Collatz Conjecture for N = 27...");
+    let mut n = 27;
+    let mut steps = 0;
+    let mut peak = n;
+    
+    while n != 1 {
+        if n % 2 == 0 {
+            n = n / 2;
+        } else {
+            n = 3 * n + 1;
+        }
+        if n > peak {
+            peak = n;
+        }
+        steps = steps + 1;
+    }
+    
+    print("  Collatz(27) Total Steps to reach 1: ");
+    println(steps);
+    print("  Collatz(27) Peak Value Reached: ");
+    println(peak);
+
+    // ------------------------------------------------------------------------
+    // [6] Number Theory: Euclidean GCD & LCM Algorithm
+    // ------------------------------------------------------------------------
+    println("\n[6] Number Theory: Euclidean GCD & LCM Algorithm...");
+    let orig_a = 2520;
+    let orig_b = 1050;
+    let mut a = orig_a;
+    let mut b = orig_b;
+    
+    println("  Computing GCD(2520, 1050)...");
+    while b != 0 {
+        let remainder = a % b;
+        a = b;
+        b = remainder;
+    }
+    let gcd_val = a;
+    print("  GCD(2520, 1050) = ");
+    println(gcd_val);
+    
+    let lcm_val = (orig_a * orig_b) / gcd_val;
+    print("  LCM(2520, 1050) = ");
+    println(lcm_val);
+
+    println("\n=================================================");
+    println("   ALL 100% PURE ARDIUM ALGORITHMS COMPLETED!    ");
+    println("=================================================");
+}

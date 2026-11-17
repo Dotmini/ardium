@@ -1,0 +1,21 @@
+
+let mut grand_sum = 0;
+let mut i = 1;
+let mut d = 1;
+let mut cur_sum = 0;
+
+fn main() {
+    while (i <= 8000) {
+        cur_sum = 0;
+        d = 1;
+        while (d < i) {
+            if (i % d == 0) {
+                cur_sum = cur_sum + d;
+            }
+            d = d + 1;
+        }
+        grand_sum = grand_sum + cur_sum;
+        i = i + 1;
+    }
+    println(grand_sum);
+}

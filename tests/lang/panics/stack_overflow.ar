@@ -1,0 +1,8 @@
+// PANIC: stack overflow
+// EXIT: 134
+fn down(n: int) -> int {
+    let mut local = [n, n + 1]
+    local.push(down(n + 1))
+    return local[2] * 2 + local[0]
+}
+fn main() { println(down(0)) }

@@ -1,0 +1,3 @@
+// PANIC: called unwrap() on an error: port out of range
+fn port() -> !int { return err("port out of range") }
+fn main() { println(port().unwrap()) }

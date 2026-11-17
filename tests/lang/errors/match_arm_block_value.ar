@@ -1,0 +1,10 @@
+// ERROR: this arm produces no value
+// ERROR: end the block with `return`, `break`, `continue` or `panic(...)`
+fn main() {
+    let n = 2
+    let s = match n {
+        1 => "one",
+        _ => { println("other") },
+    }
+    println(s)
+}

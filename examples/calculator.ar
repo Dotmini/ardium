@@ -1,0 +1,338 @@
+// A tiny calculator language, written 100% in Arc:
+// tokenizer -> recursive-descent parser -> tree-walking evaluator,
+// with variables, functions and error messages that point at the problem.
+// Tokens and the syntax tree are enums, errors travel as `!T` with `?`.
+
+enum Token {
+    Num(float),
+    Name(str),
+    Op(str),
+    End,
+}
+
+struct Tok { token: Token, pos: int }
+
+enum Expr {
+    Num(float),
+    Var(str),
+    Neg(Expr),
+    Bin(str, Expr, Expr),
+    Call(str, [Expr]),
+}
+
+// ------------------------------------------------------------- tokenizer --
+
+fn is_digit(c: str) -> bool { return c >= "0" && c <= "9" }
+fn is_alpha(c: str) -> bool { return (c >= "a" && c <= "z") || (c >= "A" && c <= "Z") || c == "_" }
+
+struct Lexer { chars: [str], error_pos: int }
+
+impl Lexer {
+    fn take_while(self, start: int, pred: fn(str) -> bool) -> int {
+        let mut i = start
+        while i < self.chars.len() && pred(self.chars[i]) { i += 1 }
+        return i
+    }
+
+    fn tokenize(mut self) -> ![Tok] {
+        let cs = self.chars
+        let mut toks: [Tok] = []
+        let mut i = 0
+        while i < cs.len() {
+            let c = cs[i]
+            if c == " " {
+                i += 1
+                continue
+            }
+            if is_digit(c) || c == "." {
+                let end = self.take_while(i, |ch| is_digit(ch) || ch == ".")
+                let text = cs[i..end].join("")
+                if let v = parse_float(text) {
+                    toks.push(Tok { token: Token::Num(v), pos: i })
+                } else {
+                    self.error_pos = i
+                    return err(f"bad number '{text}'")
+                }
+                i = end
+            } elif is_alpha(c) {
+                let end = self.take_while(i, |ch| is_alpha(ch) || is_digit(ch))
+                toks.push(Tok { token: Token::Name(cs[i..end].join("")), pos: i })
+                i = end
+            } elif "+-*/%^()=,".contains(c) {
+                toks.push(Tok { token: Token::Op(c), pos: i })
+                i += 1
+            } else {
+                self.error_pos = i
+                return err(f"unexpected character '{c}'")
+            }
+        }
+        toks.push(Tok { token: Token::End, pos: cs.len() })
+        return toks
+    }
+}
+
+// ---------------------------------------------------------------- parser --
+//   expr  := term (("+" | "-") term)*
+//   term  := unary (("*" | "/" | "%") unary)*
+//   unary := "-" unary | power
+//   power := primary ("^" unary)?          (right associative)
+//   primary := number | name | name "(" args ")" | "(" expr ")"
+
+struct Parser { toks: [Tok], pos: int, error_pos: int }
+
+fn describe(t: Token) -> str {
+    return match t {
+        Token::Num(v) => str(v),
+        Token::Name(n) => n,
+        Token::Op(o) => o,
+        Token::End => "end of input",
+    }
+}
+
+impl Parser {
+    fn peek(self) -> Tok { return self.toks[self.pos] }
+
+    fn advance(mut self) -> Tok {
+        let t = self.toks[self.pos]
+        if t.token != Token::End { self.pos += 1 }
+        return t
+    }
+
+    fn at_op(self, op: str) -> bool {
+        return self.peek().token == Token::Op(op)
+    }
+
+    fn fail(mut self, msg: str) -> !Expr {
+        self.error_pos = self.peek().pos
+        return err(msg)
+    }
+
+    fn expr(mut self) -> !Expr {
+        let mut left = self.term()?
+        while self.at_op("+") || self.at_op("-") {
+            let op = describe(self.advance().token)
+            left = Expr::Bin(op, left, self.term()?)
+        }
+        return left
+    }
+
+    fn term(mut self) -> !Expr {
+        let mut left = self.unary()?
+        while self.at_op("*") || self.at_op("/") || self.at_op("%") {
+            let op = describe(self.advance().token)
+            left = Expr::Bin(op, left, self.unary()?)
+        }
+        return left
+    }
+
+    fn unary(mut self) -> !Expr {
+        if self.at_op("-") {
+            self.advance()
+            return Expr::Neg(self.unary()?)
+        }
+        return self.power()
+    }
+
+    fn power(mut self) -> !Expr {
+        let base = self.primary()?
+        if self.at_op("^") {
+            self.advance()
+            return Expr::Bin("^", base, self.unary()?)
+        }
+        return base
+    }
+
+    fn primary(mut self) -> !Expr {
+        let t = self.peek()
+        match t.token {
+            Token::Num(v) => {
+                self.advance()
+                return Expr::Num(v)
+            }
+            Token::Name(name) => {
+                self.advance()
+                if !self.at_op("(") { return Expr::Var(name) }
+                self.advance()
+                let mut args: [Expr] = []
+                if !self.at_op(")") {
+                    loop {
+                        args.push(self.expr()?)
+                        if self.at_op(",") { self.advance() } else { break }
+                    }
+                }
+                if !self.at_op(")") { return self.fail("expected ')' after the arguments") }
+                self.advance()
+                return Expr::Call(name, args)
+            }
+            _ => {
+                if self.at_op("(") {
+                    self.advance()
+                    let inner = self.expr()?
+                    if !self.at_op(")") { return self.fail("expected ')'") }
+                    self.advance()
+                    return inner
+                }
+                return self.fail(f"expected a number, a name or '(', found '{describe(t.token)}'")
+            }
+        }
+    }
+}
+
+// ------------------------------------------------------------- evaluator --
+
+struct Env { vars: [str: float] }
+
+fn plural(n: int) -> str {
+    return match n { 1 => "", _ => "s" }
+}
+
+impl Env {
+    fn eval(self, e: Expr) -> !float {
+        match e {
+            Expr::Num(v) => return v,
+            Expr::Var(name) => {
+                if let v = self.vars.get(name) { return v }
+                return err(f"unknown variable '{name}'")
+            }
+            Expr::Neg(inner) => return -self.eval(inner)?,
+            Expr::Bin(op, l, r) => {
+                let a = self.eval(l)?
+                let b = self.eval(r)?
+                return match op {
+                    "+" => ok(a + b),
+                    "-" => ok(a - b),
+                    "*" => ok(a * b),
+                    "^" => ok(pow(a, b)),
+                    _ => divide(op, a, b),
+                }
+            }
+            Expr::Call(name, args) => {
+                let mut vals: [float] = []
+                for a in args { vals.push(self.eval(a)?) }
+                return call(name, vals)
+            }
+        }
+    }
+}
+
+fn divide(op: str, a: float, b: float) -> !float {
+    if b == 0 { return err("division by zero") }
+    if op == "/" { return a / b }
+    return a % b
+}
+
+fn call(name: str, args: [float]) -> !float {
+    let n = args.len()
+    if name == "sqrt" && n == 1 {
+        if args[0] < 0 { return err("sqrt of a negative number") }
+        return sqrt(args[0])
+    }
+    if name == "abs" && n == 1 { return abs(args[0]) }
+    if name == "max" && n > 0 { return args.max().unwrap() }
+    if name == "min" && n > 0 { return args.min().unwrap() }
+    if name == "avg" && n > 0 { return args.sum() / float(n) }
+    return err(f"unknown function {name}() with {n} argument{plural(n)}")
+}
+
+// ------------------------------------------------------------------ REPL --
+
+fn fmt(v: float) -> str {
+    if v == floor(v) && abs(v) < 1e15 { return str(int(v)) }
+    return str(v)
+}
+
+fn show_error(line: str, pos: int, msg: str) {
+    if pos < 0 {
+        println(f"  error: {msg}")
+        return
+    }
+    println(f"  {line}")
+    println(f"  {" ".repeat(pos)}^ {msg}")
+}
+
+// Runs one line; `!void` errors carry the message, positions are kept aside.
+fn run_line(mut env: Env, line: str) -> bool {
+    let mut lx = Lexer { chars: line.chars(), error_pos: -1 }
+    let toks = match lx.tokenize() {
+        ok(t) => t,
+        err(e) => {
+            show_error(line, lx.error_pos, e)
+            return false
+        }
+    }
+    let mut p = Parser { toks, pos: 0, error_pos: -1 }
+    let mut target = ""
+    if p.peek().token == Token::Name("let") {
+        p.advance()
+        let name = p.advance()
+        match name.token {
+            Token::Name(n) => target = n,
+            _ => {
+                show_error(line, name.pos, "expected a variable name after 'let'")
+                return false
+            }
+        }
+        if !p.at_op("=") {
+            show_error(line, p.peek().pos, "expected '='")
+            return false
+        }
+        p.advance()
+    }
+    let parsed = p.expr()
+    if let e = parsed.error() {
+        show_error(line, p.error_pos, e)
+        return false
+    }
+    if p.peek().token != Token::End {
+        show_error(line, p.peek().pos, f"unexpected '{describe(p.peek().token)}'")
+        return false
+    }
+    match env.eval(parsed.unwrap()) {
+        ok(v) => {
+            if target.is_empty() {
+                println(f"  = {fmt(v)}")
+            } else {
+                env.vars[target] = v
+                println(f"  {target} = {fmt(v)}")
+            }
+            return true
+        }
+        err(e) => {
+            show_error(line, -1, e)
+            return false
+        }
+    }
+}
+
+fn main() {
+    let program = [
+        "let r = 2.5",
+        "let area = 3.14159 * r ^ 2",
+        "area / 2",
+        "sqrt(16) + max(2, 7, 4) * -3",
+        "(1 + 2) * (3 + 4) % 5",
+        "-2 ^ 2",
+        "2 ^ 3 ^ 2",
+        "avg(1, 2, 3, 4)",
+        "let total = area + r * 10",
+        "10 / (5 - 5)",
+        "radius * 2",
+        "3 + * 4",
+        "sqrt(2",
+        "4 $ 2",
+        "hypot(3, 4)",
+    ]
+    let mut env = Env { vars: [:] }
+    println("Arc calculator (written 100% in Arc)")
+    println("------------------------------------")
+    let mut ok_count = 0
+    for line in program {
+        println(f"> {line}")
+        if run_line(env, line) { ok_count += 1 }
+    }
+    println("------------------------------------")
+    println(f"{ok_count} succeeded, {program.len() - ok_count} errors")
+    let mut names = env.vars.keys()
+    names.sort()
+    for n in names { println(f"  {n:<6} = {fmt(env.vars[n])}") }
+}

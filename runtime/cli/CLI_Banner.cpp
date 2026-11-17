@@ -3,7 +3,7 @@
 
 /**
  * ============================================================================
- *  ARDIUM v5.0 - CLI BRANDING COMPONENT
+ *  ARC LANGUAGE v3.0.0 - CLI BRANDING COMPONENT
  * ============================================================================
  *  Architect: Major
  *  Branding:  Dotmini Software Enterprise
@@ -18,14 +18,14 @@ void print_banner() {
     const std::string BOLD = "\033[1m";
 
     std::cout << CYAN << R"(
-    █████  ██████  ██████  ██ ██    ██ ███    ███ 
-   ██   ██ ██   ██ ██   ██ ██ ██    ██ ████  ████ 
-   ███████ ██████  ██   ██ ██ ██    ██ ██ ████ ██ 
-   ██   ██ ██   ██ ██   ██ ██ ██    ██ ██  ██  ██ 
-   ██   ██ ██   ██ ██████  ██  ██████  ██      ██ 
+       █████  ██████   ██████ 
+      ██   ██ ██   ██ ██      
+      ███████ ██████  ██      
+      ██   ██ ██   ██ ██      
+      ██   ██ ██   ██  ██████ 
     )" << RESET << std::endl;
 
-    std::cout << YELLOW << "   --- TITAN ENGINE v5.0 | SUPREME PERFORMANCE ---" << RESET << std::endl << std::endl;
+    std::cout << YELLOW << "   --- ARC LANGUAGE TITAN ENGINE | SUPREME PERFORMANCE ---" << RESET << std::endl << std::endl;
 
     std::cout << BOLD << "   CREATOR : " << RESET << "Tirawat Nantamas" << std::endl;
     std::cout << BOLD << "   ROLE    : " << RESET << "Founder of Dotmini Software | Advisor of SPU AI CLUB" << std::endl;
@@ -33,3 +33,4 @@ void print_banner() {
     std::cout << BOLD << "   MAJOR   : " << RESET << "Interdisciplinary Technology & Innovation" << std::endl;
     std::cout << std::string(66, '-') << std::endl;
 }
+

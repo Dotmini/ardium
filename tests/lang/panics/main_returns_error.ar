@@ -1,0 +1,7 @@
+// EXIT: 1
+// PANIC: error: config file missing
+fn load() -> !str { return err("config file missing") }
+fn main() -> !void {
+    let c = load()?
+    println(c)
+}

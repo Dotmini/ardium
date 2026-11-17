@@ -1,0 +1,43 @@
+struct Button { label: str, on_click: fn(str) -> str }
+
+fn apply(f: fn(int) -> int, x: int) -> int { return f(x) }
+
+fn make_adder(n: int) -> fn(int) -> int {
+    return |x| x + n
+}
+
+fn compose(f: fn(int) -> int, g: fn(int) -> int) -> fn(int) -> int {
+    return |x| g(f(x))
+}
+
+fn square(x: int) -> int { return x * x }
+
+fn main() {
+    let add5 = make_adder(5)
+    println(add5(1), apply(add5, 10), apply(square, 7), apply(|x| x - 1, 0))
+    let both = compose(add5, square)
+    println(both(2))
+    let xs = [4, 1, 3, 5, 2]
+    println(xs.map(|x| x * 10), xs.filter(|x| x % 2 == 1), xs.map(square))
+    println(xs.fold(1, |acc, x| acc * x), xs.any(|x| x > 4), xs.all(|x| x > 4), xs.find(|x| x > 3), xs.find(|x| x > 9))
+    println(xs.min(), xs.max(), xs.sum(), ["b", "a", "c"].min(), [2.5, 1.5].max(), [0; 0].min())
+    let mut people = ["Ann:31", "Bob:25", "Cy:31", "Di:19"]
+    people.sort_by(|a, b| a.split(":")[1].to_int().unwrap() < b.split(":")[1].to_int().unwrap())
+    println(people)
+    let lens = ["a", "bbb", "cc"].map(|s| s.len())
+    println(lens)
+    let mut seen: [str: int] = [:]
+    let note = |k: str| { seen[k] = seen.get_or(k, 0) + 1 }
+    note("x")
+    note("y")
+    note("x")
+    println(seen)
+    let b = Button { label: "ok", on_click: |who| f"clicked by {who}" }
+    println(b.label, b.on_click("dot"))
+    let fs = [make_adder(1), make_adder(2), square]
+    println(fs.map(|f| f(10)))
+    let factor = 3
+    let scaled = [1, 2, 3].map(|x| [x, x * factor].map(|y| y + factor))
+    println(scaled)
+    println(make_adder(3)(1), compose(make_adder(1), make_adder(2))(0))
+}

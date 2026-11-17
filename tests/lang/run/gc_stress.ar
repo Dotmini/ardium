@@ -1,0 +1,39 @@
+struct Node { val: int, next: ?Node }
+
+fn build(n: int) -> ?Node {
+    let mut head: ?Node = nil
+    for i in 0..n { head = Node { val: i, next: head } }
+    return head
+}
+
+fn sum(list: ?Node) -> int {
+    let mut s = 0
+    let mut cur = list
+    while true {
+        if let n = cur {
+            s += n.val
+            cur = n.next
+        } else {
+            break
+        }
+    }
+    return s
+}
+
+fn main() {
+    let mut total = 0
+    for round in 0..30 {
+        total += sum(build(500))
+        let mut parts: [str] = []
+        for i in 0..50 { parts.push(f"item-{i}-{round}") }
+        total += parts.join(",").len()
+        let mut m: [str: [int]] = [:]
+        for i in 0..40 {
+            let k = str(i % 7)
+            if !m.contains(k) { m[k] = [] }
+            m[k].push(i)
+        }
+        total += m["3"].len()
+    }
+    println(total)
+}

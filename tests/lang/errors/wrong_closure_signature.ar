@@ -1,0 +1,3 @@
+// ERROR: expected a function `fn(int) -> bool`, found `fn(int) -> int`
+fn twice(x: int) -> int { return x * 2 }
+fn main() { println([1, 2].filter(twice)) }

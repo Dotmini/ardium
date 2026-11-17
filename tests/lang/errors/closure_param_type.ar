@@ -1,0 +1,4 @@
+// ERROR: cannot infer the type of closure parameter `x`
+// ERROR: annotate it: `|x: int| ...`
+fn main() { let f = |x| x + 1
+ println(f(1)) }

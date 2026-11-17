@@ -1,0 +1,8 @@
+// ERROR: `self` is not mutable
+// ERROR: fn bump(mut self, ...)
+struct C { n: int }
+impl C {
+    fn bump(self) { self.n += 1 }
+}
+fn main() { let c = C { n: 0 }
+ c.bump() }

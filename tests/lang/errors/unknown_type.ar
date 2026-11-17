@@ -1,0 +1,4 @@
+// ERROR: cannot find type `Strng`
+// ERROR: did you mean `str`?
+fn f(s: Strng) {}
+fn main() {}

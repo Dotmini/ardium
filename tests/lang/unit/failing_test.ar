@@ -1,0 +1,6 @@
+// This file intentionally contains one failing test; the runner checks it fails.
+@test
+fn test_passes() { assert_eq(2 * 2, 4) }
+
+@test
+fn test_fails() { assert_eq(2 + 2, 5) }

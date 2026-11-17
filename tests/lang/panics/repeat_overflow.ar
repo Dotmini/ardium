@@ -1,0 +1,2 @@
+// PANIC: repeat result too large
+fn main() { println("abc".repeat(6148914691236517206)) }

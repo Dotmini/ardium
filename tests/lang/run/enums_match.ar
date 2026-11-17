@@ -1,0 +1,84 @@
+enum Shape {
+    Circle(float),
+    Rect(float, float),
+    Empty,
+}
+
+impl Shape {
+    fn area(self) -> float {
+        return match self {
+            Shape::Circle(r) => 3.0 * r * r,
+            Shape::Rect(w, h) => w * h,
+            Shape::Empty => 0.0,
+        }
+    }
+    fn name(self) -> str {
+        match self {
+            Circle(_) => { return "circle" }
+            Rect(w, h) if w == h => { return "square" }
+            Rect(_, _) => { return "rectangle" }
+            Empty => { return "nothing" }
+        }
+    }
+}
+
+enum Token { Num(int), Op(str), End }
+
+fn tokens(src: str) -> [Token] {
+    let mut out: [Token] = []
+    for part in src.split_whitespace() {
+        if let n = part.to_int() { out.push(Token::Num(n)) } else { out.push(Token::Op(part)) }
+    }
+    out.push(Token::End)
+    return out
+}
+
+fn eval_rpn(src: str) -> int {
+    let mut stack: [int] = []
+    for t in tokens(src) {
+        match t {
+            Token::Num(n) => stack.push(n),
+            Token::Op(op) => {
+                let b = stack.pop()
+                let a = stack.pop()
+                stack.push(match op { "+" => a + b, "-" => a - b, "*" => a * b, _ => a / b })
+            }
+            Token::End => {}
+        }
+    }
+    return stack.pop()
+}
+
+fn grade(score: int) -> str {
+    return match score / 10 {
+        10 | 9 => "A",
+        8 => "B",
+        7 => "C",
+        _ => "F",
+    }
+}
+
+fn main() {
+    let shapes = [Shape::Circle(1), Shape::Rect(2, 3), Shape::Rect(2, 2), Shape::Empty]
+    for s in shapes { println(s, s.name(), s.area()) }
+    println(shapes)
+    println(Shape::Empty == Shape::Empty, Shape::Circle(1) == Shape::Circle(1), Shape::Circle(1) == Shape::Circle(2))
+    println(eval_rpn("3 4 + 2 *"), eval_rpn("10 2 - 3 -"))
+    println(grade(95), grade(81), grade(70), grade(12))
+    let flag = true
+    match flag {
+        true => println("yes"),
+        false => println("no"),
+    }
+    let label = match "b" { "a" => 1, "b" => 2, _ => 3 }
+    println(label)
+    let mut counts = [0, 0, 0]
+    for s in shapes {
+        match s {
+            Shape::Circle(_) => counts[0] += 1,
+            Shape::Rect(_, _) => counts[1] += 1,
+            _ => counts[2] += 1,
+        }
+    }
+    println(counts)
+}

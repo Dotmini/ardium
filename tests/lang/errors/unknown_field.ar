@@ -1,0 +1,5 @@
+// ERROR: no field `nmae` on type `User`
+// ERROR: a field with a similar name exists: `name`
+struct User { name: str }
+fn main() { let u = User { name: "a" }
+ println(u.nmae) }

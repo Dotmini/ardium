@@ -1,0 +1,4 @@
+// ERROR: mismatched types: expected `int`, found `str`
+// ERROR: argument `n` expects `int`
+fn double(n: int) -> int { return n * 2 }
+fn main() { println(double("4")) }

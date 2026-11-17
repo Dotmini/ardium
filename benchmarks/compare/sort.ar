@@ -1,0 +1,15 @@
+fn main() {
+    let a = args()
+    let mut n = 5000000
+    if a.len() > 1 { n = parse_int(a[1]) ?? n }
+    let mut xs = [0; n]
+    let mut x = 42
+    for i in 0..n {
+        x = (x * 6364136223846793005 + 1442695040888963407)
+        xs[i] = (x >> 17) % 1000000000
+    }
+    xs.sort()
+    let mut checksum = 0
+    for i in 0..n { checksum = (checksum * 31 + xs[i]) % 1000000007 }
+    println(xs[0], xs[n / 2], xs[n - 1], checksum)
+}

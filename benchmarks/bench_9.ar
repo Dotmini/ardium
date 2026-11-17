@@ -1,0 +1,16 @@
+
+let mod = 1000000007;
+let mut total = 0;
+let mut i = 1;
+let mut sq = 0;
+let mut cu = 0;
+
+fn main() {
+    while (i <= 5000000) {
+        sq = (i * i) % mod;
+        cu = (sq * i) % mod;
+        total = (total + sq + cu) % mod;
+        i = i + 1;
+    }
+    println(total);
+}

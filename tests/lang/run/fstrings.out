@@ -1,0 +1,12 @@
+Arc has 42 items
+math: 85, call: ARC, idx: 20
+pi=3.142 pi2=3 pct=50.0%
+[   42] [42   ] [  42  ] [00042] [   Arc] [***Arc***]
+escaped {braces} and "quotes" and 	 tab
+struct: P { x: 1, y: 2 }
+list: [1, 2, 3] map: ["k": "v"] opt: nil
+nested: inner 42
+literal string in expr
+bool true float 2.0 neg -7
+
+Arc

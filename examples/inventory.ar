@@ -1,0 +1,63 @@
+// Structs, methods, optionals and maps: a tiny inventory system.
+
+struct Item {
+    name: str,
+    price: float,
+    qty: int,
+}
+
+struct Inventory {
+    items: [str: Item],
+    log: [str],
+}
+
+impl Inventory {
+    fn new() -> Inventory {
+        return Inventory { items: [:], log: [] }
+    }
+
+    fn add(mut self, name: str, price: float, qty: int) {
+        if let existing = self.items.get(name) {
+            let mut it = existing
+            it.qty += qty
+            self.log.push(f"restock {name} +{qty}")
+        } else {
+            self.items[name] = Item { name, price, qty }
+            self.log.push(f"new item {name}")
+        }
+    }
+
+    fn sell(mut self, name: str, qty: int) -> ?float {
+        let found = self.items.get(name)
+        if found == nil { return nil }
+        let mut it = found.unwrap()
+        if it.qty < qty { return nil }
+        it.qty -= qty
+        self.log.push(f"sold {qty} x {name}")
+        return it.price * float(qty)
+    }
+
+    fn total_value(self) -> float {
+        let mut total = 0.0
+        for _, it in self.items { total += it.price * float(it.qty) }
+        return total
+    }
+}
+
+fn main() {
+    let mut inv = Inventory::new()
+    inv.add("apple", 0.5, 100)
+    inv.add("pear", 0.75, 40)
+    inv.add("apple", 0.5, 20)
+
+    let revenue = inv.sell("apple", 30) ?? 0.0
+    println(f"sold apples for ${revenue:.2}")
+    if inv.sell("pear", 500) == nil { println("cannot sell 500 pears") }
+    if inv.sell("mango", 1) == nil { println("no mangoes in stock") }
+
+    for name, it in inv.items {
+        println(f"{name:<6} qty={it.qty:>4}  price=${it.price:.2}")
+    }
+    println(f"stock value: ${inv.total_value():.2}")
+    println(inv.log)
+}

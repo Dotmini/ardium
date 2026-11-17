@@ -1,0 +1,4 @@
+// ERROR: cannot apply `+` to `str` and `int`
+// ERROR: use an f-string
+fn main() { let n = 3
+ println("n = " + n) }

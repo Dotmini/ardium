@@ -8,6 +8,46 @@ on:
     branches: [ "main" ]
 
 jobs:
+  test:
+    name: Test arc on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build tools (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang make xxd
+
+      - name: Build arc
+        run: make build
+
+      - name: Toolchain check
+        run: ./arc doctor
+
+      - name: Language test suite
+        run: make test
+
+      - name: Legacy benchmarks match the Python reference
+        shell: bash
+        run: |
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            got=$(./arc run -q benchmarks/bench_$i.ar)
+            want=$(python3 benchmarks/bench_$i.py | tail -1)
+            if [ "$got" != "$want" ]; then
+              echo "bench_$i: arc=$got python=$want"
+              exit 1
+            fi
+            echo "bench_$i ok ($got)"
+          done
+
   build:
     name: Build on ${{ matrix.os }} (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
@@ -17,7 +57,7 @@ jobs:
         include:
           - os: macos
             arch: arm64
-            runner: macos-14
+            runner: macos-15
 
     steps:
       - name: Checkout repository
@@ -52,6 +92,9 @@ jobs:
       - name: Build Ardium
         run: opam exec -- dune build --release
 
+      - name: Build arc compiler
+        run: make build
+
       - name: Prepare Artifacts (DMG/PKG)
         shell: bash
         run: |
@@ -66,7 +109,7 @@ jobs:
           path: dist/
 
   release:
-    needs: build
+    needs: [build, test]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:

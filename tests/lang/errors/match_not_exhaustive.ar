@@ -1,0 +1,9 @@
+// ERROR: non-exhaustive `match`: `Light::Yellow` not covered
+enum Light { Red, Yellow, Green }
+fn main() {
+    let l = Light::Red
+    match l {
+        Light::Red => println("stop"),
+        Light::Green => println("go"),
+    }
+}

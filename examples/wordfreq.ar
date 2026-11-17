@@ -1,0 +1,58 @@
+// Word frequency counter.
+//   arc run examples/wordfreq.ar            (built-in sample text)
+//   arc run examples/wordfreq.ar notes.txt  (count a file)
+
+let SAMPLE = "the quick brown fox jumps over the lazy dog the fox barks
+and the dog sleeps while the quick fox runs over the hill"
+
+fn normalize(word: str) -> str {
+    let mut out = ""
+    for ch in word.lower() {
+        if (ch >= "a" && ch <= "z") || (ch >= "0" && ch <= "9") { out += ch }
+    }
+    return out
+}
+
+fn count_words(text: str) -> [str: int] {
+    let mut counts: [str: int] = [:]
+    for raw in text.split_whitespace() {
+        let w = normalize(raw)
+        if w.is_empty() { continue }
+        counts[w] = counts.get_or(w, 0) + 1
+    }
+    return counts
+}
+
+// top `n` entries, highest count first (ties alphabetical)
+fn top(counts: [str: int], n: int) -> [str] {
+    let mut remaining = counts.keys()
+    remaining.sort()
+    let mut result: [str] = []
+    while result.len() < n && !remaining.is_empty() {
+        let mut best = 0
+        for i in 1..remaining.len() {
+            if counts[remaining[i]] > counts[remaining[best]] { best = i }
+        }
+        result.push(remaining.remove(best))
+    }
+    return result
+}
+
+fn main() {
+    let a = args()
+    let mut text = SAMPLE
+    if a.len() > 1 {
+        if let content = read_file(a[1]) {
+            text = content
+        } else {
+            eprintln(f"error: cannot read {a[1]}")
+            exit(1)
+        }
+    }
+    let counts = count_words(text)
+    println(f"{counts.len()} distinct words")
+    for w in top(counts, 5) {
+        let bar = "#".repeat(counts[w])
+        println(f"{w:>8} {counts[w]:3} {bar}")
+    }
+}

@@ -1,0 +1,37 @@
+let CITIES = ["Bangkok", "ChiangMai", "Phuket", "KhonKaen", "HatYai", "Pattaya", "UdonThani", "Korat", "HuaHin", "Ayutthaya"]
+
+fn main() {
+    let a = args()
+    let mut n = 1000000
+    if a.len() > 1 { n = a[1].to_int() ?? n }
+    // build
+    let mut parts: [str] = []
+    let mut x = 7
+    for _ in 0..n {
+        x = (x * 1103515245 + 12345) % 2147483648
+        let city = CITIES[(x / 1000) % 10]
+        parts.push(f"user{x % 1000},{city},{(x / 10) % 10000}")
+    }
+    let data = parts.join("\n")
+    // parse and aggregate
+    let mut totals: [str: int] = [:]
+    let mut users: [str: int] = [:]
+    let mut grand = 0
+    let lines = data.split("\n")
+    for line in lines {
+        let f = line.split(",")
+        let amount = f[2].to_int() ?? 0
+        totals[f[1]] = totals.get_or(f[1], 0) + amount
+        users[f[0]] = users.get_or(f[0], 0) + 1
+        grand += amount
+    }
+    let mut best = ""
+    let mut best_total = -1
+    for city, t in totals {
+        if t > best_total || (t == best_total && city < best) {
+            best = city
+            best_total = t
+        }
+    }
+    println(lines.len(), users.len(), best, best_total, grand)
+}

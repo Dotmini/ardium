@@ -1,0 +1,7 @@
+// ERROR: cannot assign twice to immutable variable `x`
+// ERROR: help: consider making this binding mutable: `let mut x`
+fn main() {
+    let x = 1
+    x = 2
+    println(x)
+}
