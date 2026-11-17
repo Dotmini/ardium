@@ -225,6 +225,13 @@ void CGen::line(const std::string& s) {
 
 // How a local of type `t` is declared and (if it holds GC pointers) rooted.
 static bool isValRes(Type* t) { return t->kind == TK::Result && !t->isHeap(); }
+// The reference held by a value of type `t` stored in C expression `v`, as a
+// `void *` expression ("" if the type holds none). Used by the write barrier.
+static std::string ptrPart(Type* t, const std::string& v) {
+    if (t->isHeap()) return "(void *)(" + v + ")";
+    if (isValRes(t)) return "(void *)(" + v + ").err";
+    return "";
+}
 static std::string rootOf(Type* t, const std::string& name) { return isValRes(t) ? name + ".err" : name; }
 static std::string clearOf(Type* t, const std::string& name) { return rootOf(t, name) + " = NULL;"; }
 
@@ -317,12 +324,15 @@ std::string CGen::genFunction(FnDecl* fn) {
     std::vector<std::pair<std::string, Type*>> params;
     if (fn->hasSelf) params.push_back({"a_self", fn->owner->type});
     for (size_t i = 0; i < fn->params.size(); i++) params.push_back({"", fn->paramTypes[i]});
-    hasFrame_ = true;  // conservative first pass
+    // A function that can never trigger a collection (see allocAnalysis) needs
+    // no shadow-stack frame even if it holds references.
+    bool noAlloc = noFrame_.count(fn) > 0;
+    hasFrame_ = !noAlloc;  // conservative first pass
     blockStmts(fn->body, false);
     bool anyHeapTemp = false;
     for (auto& t : temps_) if (t.type->hasPtr()) anyHeapTemp = true;
-    bool need = anyHeapTemp || needsFrame(fnVars_, params);
-    if (!need) {
+    bool need = !noAlloc && (anyHeapTemp || needsFrame(fnVars_, params));
+    if (!need && !noAlloc) {
         // regenerate without frame bookkeeping
         hasFrame_ = false;
         temps_.clear();
@@ -545,6 +555,12 @@ std::string CGen::assign(Node* n) {
     switch (target->kind) {
     case NK::Ident: {
         std::string name = varName(target->var);
+        // a variable captured by a closure lives in the closure's heap environment
+        bool inEnv = name.rfind("((ArcL_", 0) == 0;
+        if (inEnv && tt->hasPtr()) {
+            storeRef("env_", name, tt, op.empty() ? v : bind(tt, combine(name)), false);
+            break;
+        }
         if (op.empty() && storeDirect(v, name)) break;
         line(name + " = " + combine(name) + ";");
         break;
@@ -552,6 +568,10 @@ std::string CGen::assign(Node* n) {
     case NK::Field: {
         std::string o = expr(target->kids[0]);
         std::string place = o + "->f_" + mangle(target->str);
+        if (tt->hasPtr()) {
+            storeRef(o, place, tt, op.empty() ? v : bind(tt, combine(place)), false);
+            break;
+        }
         line(place + " = " + combine(place) + ";");
         break;
     }
@@ -564,7 +584,10 @@ std::string CGen::assign(Node* n) {
             temps_.back().type = T.voidT;       // not declared via temps
             std::string vt = ctype(ct->elem);
             if (op.empty()) {
-                line("*(" + vt + " *)arc_map_slot(" + c + ", &" + k + ") = " + v + ";");
+                mapStore(c, k, ct->elem, v);
+            } else if (ct->elem->hasPtr()) {
+                std::string nv = bind(ct->elem, combine("*(" + vt + " *)arc_map_must(" + c + ", &" + k + ", " + loc(target->loc) + ")"));
+                mapStore(c, k, ct->elem, nv);
             } else {
                 line("{ " + vt + " *" + ptr + " = (" + vt + " *)arc_map_must(" + c + ", &" + k + ", " + loc(target->loc) + ");");
                 line("  *" + ptr + " = " + combine("*" + ptr) + "; }");
@@ -574,7 +597,12 @@ std::string CGen::assign(Node* n) {
             std::string idx = newTemp(T.intT);
             line(idx + " = arc_idx(" + c + ", " + i + ", " + loc(target->loc) + ");");
             std::string place = "((" + ctype(ct->elem) + " *)" + c + "->data)[" + idx + "]";
-            line(place + " = " + combine(place) + ";");
+            if (tt->hasPtr()) {
+                std::string nv = op.empty() ? v : bind(tt, combine(place));
+                storeRef(c, place, tt, nv, false);
+            } else {
+                line(place + " = " + combine(place) + ";");
+            }
         }
         break;
     }
@@ -582,6 +610,27 @@ std::string CGen::assign(Node* n) {
         line("/* invalid assignment */");
     }
     return "";
+}
+
+// Stores reference-holding value `v` (type `t`) into `place` inside heap
+// object `holder`: the write barrier first, then the store. `fresh` means
+// the object was just allocated, so the slot holds no previous reference.
+void CGen::storeRef(const std::string& holder, const std::string& place, Type* t, const std::string& v, bool fresh) {
+    if (fresh) line("ARC_INIT_REF(" + ptrPart(t, v) + ");");
+    else line("arc_wb(" + holder + ", " + ptrPart(t, place) + ", " + ptrPart(t, v) + ");");
+    line(place + " = " + v + ";");
+}
+
+// m[k] = v (inserting k if needed)
+void CGen::mapStore(const std::string& m, const std::string& k, Type* vt, const std::string& v) {
+    std::string ct = ctype(vt);
+    if (!vt->hasPtr()) {
+        line("*(" + ct + " *)arc_map_slot(" + m + ", &" + k + ") = " + v + ";");
+        return;
+    }
+    std::string p = "mp" + std::to_string(++tmpCounter_);
+    line("{ " + ct + " *" + p + " = (" + ct + " *)arc_map_slot(" + m + ", &" + k + ");");
+    line("  arc_wb(" + m + ", " + ptrPart(vt, "*" + p) + ", " + ptrPart(vt, v) + "); *" + p + " = " + v + "; }");
 }
 
 // ----------------------------------------------------------- expressions --
@@ -625,10 +674,14 @@ std::string CGen::expr(Node* n) {
         FnDecl* L = n->fn;
         std::string id = std::to_string(L->lambdaId);
         std::string env = "ArcL_" + id;
-        std::string t = bind(n->type, "(ArcClo *)arc_alloc(&arc_td_lam_" + id + ", sizeof(" + env + "))");
+        std::string t = bind(n->type, "(ArcClo *)arc_new_obj(&arc_td_lam_" + id + ", sizeof(" + env + "))");
         line(t + "->fn = (void *)arc_lam_" + id + ";");
-        for (size_t i = 0; i < L->captures.size(); i++)
-            line("((" + env + " *)" + t + ")->c_" + std::to_string(i) + " = " + varName(L->captures[i].first) + ";");
+        for (size_t i = 0; i < L->captures.size(); i++) {
+            std::string place = "((" + env + " *)" + t + ")->c_" + std::to_string(i);
+            Type* ct = L->captures[i].second->type;
+            if (ct->hasPtr()) storeRef(t, place, ct, varName(L->captures[i].first), true);
+            else line(place + " = " + varName(L->captures[i].first) + ";");
+        }
         return t;
     }
     case NK::FStr: {
@@ -695,8 +748,11 @@ std::string CGen::expr(Node* n) {
         for (Node* k : n->kids) atoms.push_back(expr(k));
         std::string a = bind(n->type, "arc_arr_new(" + td(n->type) + ", " + std::to_string(atoms.size()) + ", " + std::to_string(atoms.size()) + ")");
         std::string et = ctype(n->type->elem);
-        for (size_t i = 0; i < atoms.size(); i++)
-            line("((" + et + " *)" + a + "->data)[" + std::to_string(i) + "] = " + atoms[i] + ";");
+        for (size_t i = 0; i < atoms.size(); i++) {
+            std::string place = "((" + et + " *)" + a + "->data)[" + std::to_string(i) + "]";
+            if (n->type->elem->hasPtr()) storeRef(a, place, n->type->elem, atoms[i], true);
+            else line(place + " = " + atoms[i] + ";");
+        }
         return a;
     }
     case NK::ArrayRepeat: {
@@ -710,7 +766,9 @@ std::string CGen::expr(Node* n) {
                     (n->kids[0]->kind == NK::FloatLit && n->kids[0]->fval == 0 && !std::signbit(n->kids[0]->fval));
         if (!zero) {
             std::string k = "k" + std::to_string(++tmpCounter_);
-            line("for (int64_t " + k + " = 0; " + k + " < " + cnt + "; " + k + "++) ((" + et + " *)" + a + "->data)[" + k + "] = " + v + ";");
+            std::string init = n->type->elem->hasPtr() ? "ARC_INIT_REF(" + ptrPart(n->type->elem, v) + "); " : "";
+            line("for (int64_t " + k + " = 0; " + k + " < " + cnt + "; " + k + "++) { " + init + "((" + et + " *)" + a + "->data)[" + k +
+                 "] = " + v + "; }");
         }
         return a;
     }
@@ -722,17 +780,21 @@ std::string CGen::expr(Node* n) {
             atoms.push_back(a);
         }
         std::string m = bind(n->type, "arc_map_new(" + td(n->type) + ")");
-        std::string vt = ctype(n->type->elem);
-        for (size_t i = 0; i < atoms.size(); i += 2)
-            line("*(" + vt + " *)arc_map_slot(" + m + ", &" + atoms[i] + ") = " + atoms[i + 1] + ";");
+        for (size_t i = 0; i < atoms.size(); i += 2) mapStore(m, atoms[i], n->type->elem, atoms[i + 1]);
         return m;
     }
     case NK::StructLit: {
         StructDecl* sd = n->type->sd;
         std::vector<std::string> atoms;
         for (Node* k : n->kids) atoms.push_back(expr(k));
-        std::string s = bind(n->type, "(" + structName(sd) + " *)arc_new_struct(" + td(n->type) + ")");
-        for (size_t i = 0; i < atoms.size(); i++) line(s + "->f_" + mangle(n->names[i]) + " = " + atoms[i] + ";");
+        std::string s = bind(n->type, "(" + structName(sd) + " *)arc_new_obj(" + td(n->type) + ", sizeof(" + structName(sd) + "))");
+        for (size_t i = 0; i < atoms.size(); i++) {
+            std::string place = s + "->f_" + mangle(n->names[i]);
+            Type* ft = n->kids[i]->type;
+            for (auto& f : sd->fields) if (f.name == n->names[i]) ft = f.type;
+            if (ft->hasPtr()) storeRef(s, place, ft, atoms[i], true);
+            else line(place + " = " + atoms[i] + ";");
+        }
         return s;
     }
     case NK::Cast: {
@@ -1014,10 +1076,14 @@ std::string CGen::callExpr(Node* n) {
         Variant& v = sd->variants[n->ival];
         std::vector<std::string> atoms;
         for (Node* k : n->kids) atoms.push_back(expr(k));
-        std::string t = bind(n->type, "(" + structName(sd) + " *)arc_new_struct(" + td(n->type) + ")");
+        std::string t = bind(n->type, "(" + structName(sd) + " *)arc_new_obj(" + td(n->type) + ", sizeof(" + structName(sd) + "))");
         line(t + "->tag = " + std::to_string(n->ival) + ";");
-        for (size_t i = 0; i < atoms.size(); i++)
-            line(t + "->f_" + mangle(sd->fields[v.firstField + i].name) + " = " + atoms[i] + ";");
+        for (size_t i = 0; i < atoms.size(); i++) {
+            auto& f = sd->fields[v.firstField + i];
+            std::string place = t + "->f_" + mangle(f.name);
+            if (f.type->hasPtr()) storeRef(t, place, f.type, atoms[i], true);
+            else line(place + " = " + atoms[i] + ";");
+        }
         return t;
     }
     if (n->builtin == BI::CallValue) {
@@ -1187,6 +1253,12 @@ std::string CGen::builtinCall(Node* n) {
     return "0";
 }
 
+// arr.push(v)
+std::string CGen::pushStmt(Type* et, const std::string& arr, const std::string& v) {
+    std::string mac = et->isHeap() ? "ARC_PUSH_REF(" : isValRes(et) ? "ARC_PUSH_RES(" : "ARC_PUSH(";
+    return mac + ctype(et) + ", " + arr + ", " + v + ");";
+}
+
 std::string CGen::builtinMethod(Node* n) {
     Type* rt = n->kids[0]->type;
     std::vector<std::string> a;
@@ -1220,10 +1292,11 @@ std::string CGen::builtinMethod(Node* n) {
     // arrays
     case BI::ALen: return bind(T.intT, r + "->len");
     case BI::AIsEmpty: return bind(T.boolT, "(" + r + "->len == 0)");
-    case BI::APush: line("ARC_PUSH(" + ctype(E) + ", " + r + ", " + a[1] + ");"); return "";
+    case BI::APush: line(pushStmt(E, r, a[1])); return "";
     case BI::APop: return bind(E, elemAt("arc_pop_idx(" + r + ", " + L + ")"));
     case BI::AInsert: {
         std::string k = bind(T.intT, "arc_arr_insert_at(" + r + ", " + a[1] + ", " + L + ")");
+        if (E->hasPtr()) line("arc_wb(" + r + ", NULL, " + ptrPart(E, a[2]) + ");");  // the gap holds a stale copy, not a reference
         line(elemAt(k) + " = " + a[2] + ";");
         return "";
     }
@@ -1314,10 +1387,10 @@ std::string CGen::builtinMethod(Node* n) {
         if (n->builtin == BI::AMap) {
             Type* U = n->type->elem;
             std::string y = bind(U, callClosure(ft, f, {x}));
-            line("ARC_PUSH(" + ctype(U) + ", " + res + ", " + y + ");");
+            line(pushStmt(U, res, y));
         } else {
             std::string c = bind(T.boolT, callClosure(ft, f, {x}));
-            if (n->builtin == BI::AFilter) line("if (" + c + ") ARC_PUSH(" + ctype(E) + ", " + res + ", " + x + ");");
+            if (n->builtin == BI::AFilter) line("if (" + c + ") " + pushStmt(E, res, x));
             else if (n->builtin == BI::AAny) line("if (" + c + ") { " + res + " = true; break; }");
             else if (n->builtin == BI::AAll) line("if (!" + c + ") { " + res + " = false; break; }");
             else line("if (" + c + ") { " + res + " = " + someValue(n->type, x) + "; break; }");
@@ -1395,6 +1468,64 @@ std::string CGen::builtinMethod(Node* n) {
     return "0";
 }
 
+// ------------------------------------------------------- frame elision --
+
+// Runtime functions and macros the generated code calls that never allocate
+// from the collected heap, so no collection can start inside them.
+static const std::set<std::string> kNoAlloc = {
+    "ARC_LOC", "ARC_UNLIKELY", "ARC_LIKELY", "ARC_INIT_REF", "ARC_DROP_REF", "ARC_PUSH", "ARC_PUSH_REF", "ARC_PUSH_RES",
+    "arc_wb", "arc_idx", "arc_pop_idx", "arc_last_idx", "arc_div", "arc_mod", "arc_shl", "arc_shr", "arc_iabs", "arc_imin",
+    "arc_imax", "arc_fmin", "arc_fmax", "arc_ipow", "arc_f2i", "arc_check_len", "arc_check_range", "arc_str_eq", "arc_str_cmp",
+    "arc_deep_eq", "arc_value_eq", "arc_map_get", "arc_map_must", "arc_map_next", "arc_map_ekey", "arc_map_eval", "arc_map_slot",
+    "arc_map_remove", "arc_map_clear", "arc_arr_insert_at", "arc_arr_remove_at", "arc_arr_clear", "arc_arr_reverse",
+    "arc_arr_sort", "arc_arr_index_of", "arc_is_err", "arc_panic_at", "arc_unwrap_fail", "arc_unwrap_err_fail",
+    "arc_index_fail", "arc_buf_init", "arc_buf_put", "arc_buf_putc", "arc_buf_int", "arc_buf_float", "arc_buf_float_prec",
+    "arc_buf_bool", "arc_buf_str", "arc_buf_quoted", "arc_buf_align", "arc_fmt_value", "arc_out", "arc_str_find",
+    "arc_str_contains", "arc_str_starts_with", "arc_str_ends_with", "arc_str_byte_at", "arc_str_char_count", "arc_ord",
+    "arc_parse_int", "arc_parse_float", "arc_time_ns", "arc_unix_time", "arc_sleep_ms", "arc_rand_int", "arc_rand_float",
+    "arc_seed", "arc_write_file", "arc_file_exists", "arc_exec", "arc_run_cmd", "arc_exit", "arc_main_result",
+};
+
+// Returns the functions that can never start a collection: their generated C
+// calls only non-allocating runtime functions and other such functions (no
+// closure calls). Anything unknown counts as allocating.
+std::vector<FnDecl*> CGen::allocAnalysis(const std::vector<FnDecl*>& all, const std::map<FnDecl*, std::string>& bodies) {
+    std::map<std::string, FnDecl*> byName;
+    for (FnDecl* fn : all) if (!fn->isLambda) byName[fnName(fn)] = fn;
+    std::map<FnDecl*, bool> allocs;
+    std::map<FnDecl*, std::vector<FnDecl*>> callees;
+    for (FnDecl* fn : all) {
+        const std::string& b = bodies.at(fn);
+        bool direct = b.find("->fn)(") != std::string::npos;  // closure call: unknown code
+        for (size_t i = 0; i < b.size() && !direct;) {
+            if (!(std::isalpha((unsigned char)b[i]) || b[i] == '_')) { i++; continue; }
+            size_t j = i;
+            while (j < b.size() && (std::isalnum((unsigned char)b[j]) || b[j] == '_')) j++;
+            std::string id = b.substr(i, j - i);
+            size_t k = j;
+            while (k < b.size() && b[k] == ' ') k++;
+            if (k < b.size() && b[k] == '(' && (id.rfind("arc_", 0) == 0 || id.rfind("ARC_", 0) == 0)) {
+                auto it = byName.find(id);
+                if (it != byName.end()) callees[fn].push_back(it->second);
+                else if (!kNoAlloc.count(id)) direct = true;
+            }
+            i = j;
+        }
+        allocs[fn] = direct;
+    }
+    for (bool changed = true; changed;) {
+        changed = false;
+        for (FnDecl* fn : all) {
+            if (allocs[fn]) continue;
+            for (FnDecl* c : callees[fn])
+                if (allocs[c]) { allocs[fn] = changed = true; break; }
+        }
+    }
+    std::vector<FnDecl*> r;
+    for (FnDecl* fn : all) if (!allocs[fn]) r.push_back(fn);
+    return r;
+}
+
 // ----------------------------------------------------------------- module --
 
 std::string CGen::generate(const std::string& runtimeSrc) {
@@ -1413,7 +1544,14 @@ std::string CGen::generate(const std::string& runtimeSrc) {
     for (FnDecl* fn : prog_.lambdas) all.push_back(fn);
     // assign parameter names before prototypes are printed
     for (FnDecl* fn : all) for (auto& p : fn->params) if (p.var) varName(p.var);
-    for (FnDecl* fn : all) fns << genFunction(fn);
+    std::map<FnDecl*, std::string> bodies;
+    for (FnDecl* fn : all) bodies[fn] = genFunction(fn);
+    // functions that never allocate (directly or through calls) drop their frames
+    for (FnDecl* fn : allocAnalysis(all, bodies)) {
+        noFrame_.insert(fn);
+        bodies[fn] = genFunction(fn);
+    }
+    for (FnDecl* fn : all) fns << bodies[fn];
     std::string init = genGlobalInit();
 
     // struct / enum / closure-environment layouts (rendered first: they may register result types)
@@ -1434,6 +1572,7 @@ std::string CGen::generate(const std::string& runtimeSrc) {
     for (size_t i = 0; i < tdOrder_.size(); i++) ctype(tdOrder_[i]);  // registers result typedefs used only in descriptors
 
     std::ostringstream o;
+    if (rcMode_) o << "#define ARC_MM_RC 1\n";
     o << runtimeSrc << "\n";
     for (StructDecl* sd : prog_.structs) o << "typedef struct " << structName(sd) << " " << structName(sd) << ";\n";
     for (auto& kv : resTypes_)  // value results: {error, value}
@@ -1511,13 +1650,13 @@ std::string CGen::generate(const std::string& runtimeSrc) {
         if (!sd->isEnum) continue;
         for (size_t i = 0; i < sd->variants.size(); i++)
             if (sd->variants[i].types.empty())
-                o << "static " << structName(sd) << " arc_ev_" << mangle(sd->name) << "_" << i << " = {{0, " << td(sd->type)
-                  << ", ARC_F_STATIC, 0}, " << i << "};\n";
+                o << "static " << structName(sd) << " arc_ev_" << mangle(sd->name) << "_" << i << " = {{" << td(sd->type)
+                  << ", ARC_F_STATIC, ARC_RC_STATIC}, " << i << "};\n";
     }
     // string literals
     for (size_t i = 0; i < strLitOrder_.size(); i++) {
         const std::string& s = strLitOrder_[i];
-        o << "static ArcStr arc_lit_" << i << " = {{0, &arc_td_str, ARC_F_STATIC, 0}, " << s.size() << ", " << cstrLit(s) << "};\n";
+        o << "static ArcStr arc_lit_" << i << " = {{&arc_td_str, ARC_F_STATIC, ARC_RC_STATIC}, " << s.size() << ", " << cstrLit(s) << "};\n";
     }
     // file names
     o << "static const char *const arc_files[] = {";
@@ -1541,7 +1680,7 @@ std::string CGen::generate(const std::string& runtimeSrc) {
         }
         call += ")";
         o << sig << ") {\n    (void)env_;\n    " << (f->ret->kind == TK::Void ? "" : "return ") << call << ";\n}\n";
-        o << "static ArcClo arc_fv_" << fnName(f) << " = {{0, &arc_td_fn, ARC_F_STATIC, 0}, (void *)" << tr << "};\n";
+        o << "static ArcClo arc_fv_" << fnName(f) << " = {{&arc_td_fn, ARC_F_STATIC, ARC_RC_STATIC}, (void *)" << tr << "};\n";
     }
     o << "\n" << fns.str() << extraFns_.str() << init;
 
@@ -1558,7 +1697,8 @@ std::string CGen::generate(const std::string& runtimeSrc) {
     o << "int main(int argc, char **argv) {\n";
     o << "    arc_runtime_init(argc, argv, arc_files);\n";
     for (Node* g : prog_.globals)
-        if (g->var && g->var->type->isHeap()) o << "    arc_add_groot((void **)&" << varName(g->var) << ");\n";
+        if (g->var && g->var->type->hasPtr())
+            o << "    arc_add_groot((void **)&" << rootOf(g->var->type, varName(g->var)) << ");\n";
     o << "    arc_init_globals();\n";
     if (testMode_) {
         o << "    int rc = arc_run_tests(arc_tests, " << tests.size() << ", argc > 1 ? argv[1] : NULL);\n";

@@ -1,0 +1,112 @@
+// Exercises every kind of reference store, so the suite checks the write
+// barrier (GC) and the reference counts (ARC) under ARC_GC_STRESS.
+
+struct Node { name: str, next: ?Node, kids: [Node] }
+
+enum Shape {
+    Circle(float),
+    Group(str, [Shape]),
+    Empty,
+}
+
+fn area(s: Shape) -> float {
+    return match s {
+        Shape::Circle(r) => 3.0 * r * r,
+        Shape::Group(_, items) => items.map(|x| area(x)).sum(),
+        Shape::Empty => 0.0,
+    }
+}
+
+fn ring(n: int) -> Node {
+    // a cycle: only the cycle collector (ARC) or tracing (GC) can free it
+    let first = Node { name: "n0", next: nil, kids: [] }
+    let mut cur = first
+    for i in 1..n {
+        let nd = Node { name: f"n{i}", next: nil, kids: [] }
+        cur.next = nd
+        cur = nd
+    }
+    cur.next = first
+    return first
+}
+
+struct Counter { count: int, log: [str] }
+
+fn make_counter() -> fn() -> str {
+    let mut st = Counter { count: 0, log: [] }
+    return || {
+        st.count += 1
+        st.log.push(f"tick{st.count}")
+        st.log.push("x")
+        st.log = st.log[1..]  // replace the array: the old one must be released
+        return f"{st.count}:{st.log.len()}"
+    }
+}
+
+fn check(i: int) -> !int {
+    if i % 3 == 0 { return err(f"bad {i}") }
+    return i
+}
+
+fn main() {
+    // field stores into old objects, replacing references
+    let mut root = Node { name: "root", next: nil, kids: [] }
+    for round in 0..200 {
+        let child = Node { name: f"c{round}", next: nil, kids: [] }
+        root.kids.push(child)
+        if root.kids.len() > 5 { root.kids.remove(0) }
+        root.next = child
+        root.name = root.name + "."
+    }
+    let mut next_name = "none"
+    if let n = root.next { next_name = n.name }
+    println(root.kids.len(), next_name, root.name.len())
+
+    // cycles become garbage
+    let mut total = 0
+    for _ in 0..300 {
+        let r = ring(20)
+        total += r.name.len()
+    }
+    println(total)
+
+    // maps: insert, overwrite, remove, clear
+    let mut m: [str: Node] = [:]
+    for i in 0..500 {
+        m[f"k{i % 37}"] = Node { name: f"v{i}", next: nil, kids: [] }
+        if i % 11 == 0 { m.remove(f"k{i % 13}") }
+    }
+    let ks = m.keys()
+    let vs = m.values()
+    println(m.len(), ks.len(), vs.len())
+    m["k1"] = Node { name: "fresh", next: nil, kids: [] }
+    m.clear()
+    println(m.len())
+
+    // arrays: insert, pop, slice, reverse, sort, filter, map
+    let mut words: [str] = []
+    for w in "the quick brown fox jumps over the lazy dog".split(" ") { words.insert(0, w.upper()) }
+    let last = words.pop()
+    let mid = words[2..5]
+    words.reverse()
+    words.sort()
+    let long = words.filter(|w| w.len() > 3).map(|w| w + "!")
+    println(last, mid, long)
+
+    // enums holding arrays of enums
+    let g = Shape::Group("all", [Shape::Circle(1.0), Shape::Group("inner", [Shape::Circle(2.0), Shape::Empty]), Shape::Empty])
+    println(area(g))
+
+    // closures with captured, mutated state
+    let tick = make_counter()
+    let mut last_tick = ""
+    for _ in 0..50 { last_tick = tick() }
+    println(last_tick)
+
+    // results holding references
+    let mut errs: [!int] = []
+    for i in 0..10 { errs.push(check(i)) }
+    let mut bad = 0
+    for e in errs { if e.is_err() { bad += 1 } }
+    println(bad)
+}

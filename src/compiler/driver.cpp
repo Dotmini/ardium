@@ -184,6 +184,15 @@ static std::string shellQuote(const std::string& s) {
     return r + "'";
 }
 
+std::string memoryMode(const BuildOptions& opts) {
+    std::string m = opts.mm;
+    if (m.empty()) {
+        const char* e = std::getenv("ARC_MM");
+        m = e && *e ? e : "gc";
+    }
+    return m == "gc" || m == "arc" ? m : "";
+}
+
 static BuildResult buildProgramImpl(const std::string& path, const BuildOptions& opts) {
     BuildResult res;
     Program prog;
@@ -256,7 +265,13 @@ static BuildResult buildProgramImpl(const std::string& path, const BuildOptions&
     if (opts.checkOnly) { res.ok = true; return res; }
 
     // ---- generate C
-    CGen gen(prog, opts.testMode);
+    std::string mm = memoryMode(opts);
+    if (mm.empty()) {
+        res.error = "unknown memory mode (use --mm=gc or --mm=arc)";
+        std::cerr << "error: " << res.error << "\n";
+        return res;
+    }
+    CGen gen(prog, opts.testMode, mm == "arc");
     std::string csrc = gen.generate(runtimeSource());
     if (!opts.emitC.empty()) {
         std::ofstream o(opts.emitC, std::ios::binary);

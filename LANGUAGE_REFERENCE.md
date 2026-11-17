@@ -67,7 +67,8 @@ arc clean                    # ล้าง build cache (~/.cache/arc)
 
 ในโฟลเดอร์ที่มี `arc.toml` สั่ง `arc run` / `arc build` ได้เลยโดยไม่ต้องระบุไฟล์ (ใช้ `src/main.ar`)
 
-ตัวเลือก: `-q` ซ่อน warning, `--emit-c out.c` ดู C ที่ถูกสร้าง, ตัวแปรแวดล้อม `ARC_CC` เปลี่ยน C compiler
+ตัวเลือก: `-q` ซ่อน warning, `--emit-c out.c` ดู C ที่ถูกสร้าง, `--mm=gc|arc` เลือกวิธีจัดการหน่วยความจำ
+(ดู [Memory model](#memory)), ตัวแปรแวดล้อม `ARC_CC` เปลี่ยน C compiler และ `ARC_MM` กำหนดค่าเริ่มต้นของ `--mm`
 
 Exit code: compile error = `1`, panic = `101`, test fail = `101`
 
@@ -574,15 +575,42 @@ fn main() { println(triple(14)) }
 - `int`, `float`, `bool` เป็น value type (copy เมื่อกำหนดค่า)
 - `str` เป็น immutable — แชร์ได้อย่างปลอดภัย
 - array, map, struct, enum และ closure เป็น reference type — ส่งเข้าฟังก์ชันไม่ copy (ถ้าต้องการสำเนาใช้ `.copy()`)
-- หน่วยความจำคืนอัตโนมัติด้วย precise mark & sweep GC (size-class allocator) ไม่มี `malloc`/`free`
-- ทดสอบ GC แบบเข้มได้ด้วย `ARC_GC_STRESS=1 arc run file.ar` (เก็บขยะทุกครั้งที่ allocate)
+- หน่วยความจำคืนอัตโนมัติ ไม่มี `malloc`/`free` ในโค้ดผู้ใช้ โดยเลือกได้ 2 แบบตอนคอมไพล์ (ภาษาและผลลัพธ์ของโปรแกรมเหมือนกันทุกประการ)
+
+| | `--mm=gc` (ค่าเริ่มต้น) | `--mm=arc` |
+|---|---|---|
+| วิธีการ | generational mark & sweep GC | automatic reference counting + cycle collector |
+| จุดเด่น | throughput สูงสุด (allocate เร็ว เก็บขยะรุ่นใหม่อย่างเดียวเป็นส่วนใหญ่) | ใช้หน่วยความจำน้อย คืนหน่วยความจำเกือบทันที |
+| เหมาะกับ | งานคำนวณ, server ที่สร้าง object จำนวนมาก | เครื่องที่หน่วยความจำจำกัด, โปรแกรมที่รันนาน |
+| reference cycle | เก็บได้ตามปกติ | เก็บได้ด้วย cycle collector ที่ทำงานเป็นครั้งคราว |
+
+```bash
+arc run main.ar                # GC (generational)
+arc run --mm=arc main.ar       # ARC
+ARC_MM=arc arc test            # ตั้งค่าเริ่มต้นทั้ง session
+```
+
+- **GC**: object ใหม่อยู่ใน nursery (8 MB) — minor collection ตรวจเฉพาะ object รุ่นใหม่ (จาก root และ remembered set)
+  ส่วน object ที่รอดจะถูกเลื่อนเป็นรุ่นเก่า และ major collection จะทำงานเมื่อรุ่นเก่าโตเป็น 2 เท่าของขนาดที่ยังใช้งานอยู่
+- **ARC**: นับ reference จาก heap object ทุกตัว (compiler แทรก write barrier ทุกจุดที่เก็บ reference ลงใน heap)
+  ส่วน reference จากตัวแปร local ตรวจเป็นชุดจาก stack (deferred RC) จึงไม่มีต้นทุน retain/release ตอนส่งค่าเข้าฟังก์ชัน
+  object ที่ไม่มีใครอ้างถึงจะถูกคืนภายในไม่กี่พัน allocation ถัดไป และ cycle ถูกเก็บโดย mark & sweep ที่ทำงานนาน ๆ ครั้ง
+- ทั้งสองแบบใช้ size-class allocator และ object header 16 byte เดียวกัน
+
+ตัวแปรแวดล้อมสำหรับตรวจและวิเคราะห์ (ใช้ได้ทั้งสองแบบ):
+
+| ตัวแปร | ผล |
+|---|---|
+| `ARC_GC_STRESS=1` | เก็บขยะทุกครั้งที่ allocate และตรวจ heap ทุกครั้ง (หา bug ของ root/barrier/reference count) |
+| `ARC_GC_VERIFY=1` | ตรวจ heap หลังเก็บขยะทุกครั้ง: ไม่มี reference ไปยัง object ที่ถูกคืนแล้ว, GC: barrier ครบ, ARC: reference count ตรงทุกตัว |
+| `ARC_GC_STATS=1` | พิมพ์สถิติตอนจบโปรแกรม: จำนวนครั้ง, เวลารวม, pause ที่นานที่สุด และการใช้ page ของแต่ละ size class |
 
 ---
 
 ## 19. สิ่งที่ยังไม่รองรับ <a name="roadmap"></a>
 
 แผนถัดไป: generics ที่ผู้ใช้ประกาศเอง, interface/trait, module namespaces, concurrency (threads/channels),
-network (TCP/HTTP), FFI กับ C, LSP สำหรับ editor, GC แบบ incremental (ลดเวลาหยุด) และ GUI/Metal bindings ของเดิม
+network (TCP/HTTP), FFI กับ C, LSP สำหรับ editor, GC แบบ concurrent (pause ตอนนี้ต่ำกว่า 10 ms) และ GUI/Metal bindings ของเดิม
 (`VStack`, `Button`, `extern fn`, `GLOBAL(...)`, `malloc/peek/poke` ของคอมไพเลอร์รุ่นเก่ายังไม่ถูกย้ายมา)
 
 ---

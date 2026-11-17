@@ -2,7 +2,9 @@
 
 #include "ast.h"
 
+#include <map>
 #include <set>
+#include <vector>
 #include <sstream>
 
 namespace arc {
@@ -10,12 +12,13 @@ namespace arc {
 // Lowers a checked Program to a single C translation unit.
 class CGen {
 public:
-    CGen(Program& p, bool testMode) : prog_(p), testMode_(testMode), T(Types::get()) {}
+    CGen(Program& p, bool testMode, bool rcMode = false) : prog_(p), testMode_(testMode), rcMode_(rcMode), T(Types::get()) {}
     std::string generate(const std::string& runtimeSrc);
 
 private:
     Program& prog_;
     bool testMode_;
+    bool rcMode_;  // --mm=arc: reference counting instead of the tracing GC
     Types& T;
 
     // ---- module-level output
@@ -65,6 +68,8 @@ private:
 
     // functions
     std::string genFunction(FnDecl* fn);
+    std::vector<FnDecl*> allocAnalysis(const std::vector<FnDecl*>& all, const std::map<FnDecl*, std::string>& bodies);
+    std::set<FnDecl*> noFrame_;  // functions proven never to allocate
     std::string genGlobalInit();
     std::string prototype(FnDecl* fn);
     std::string assembleBody(const std::string& sig, const std::string& body, Type* ret);
@@ -85,6 +90,9 @@ private:
     std::string builtinMethod(Node* n);
     void fmtInto(const std::string& buf, const std::string& atom, Type* t, const std::string& spec, bool quoted);
     std::string assign(Node* n);
+    void storeRef(const std::string& holder, const std::string& place, Type* t, const std::string& v, bool fresh);
+    void mapStore(const std::string& m, const std::string& k, Type* vt, const std::string& v);
+    std::string pushStmt(Type* et, const std::string& arr, const std::string& v);
     std::string resIsErr(Type* rt, const std::string& a);
     std::string resErr(Type* rt, const std::string& a);
     std::string resVal(Type* rt, const std::string& a);

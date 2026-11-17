@@ -11,7 +11,11 @@ struct BuildOptions {
     bool checkOnly = false;   // stop after type checking
     bool quietWarnings = false;
     std::string emitC;        // write generated C here (if set)
+    std::string mm;           // memory management: "gc" or "arc" (empty: $ARC_MM, else gc)
 };
+
+// "gc" or "arc" after applying the default; "" if the requested mode is unknown
+std::string memoryMode(const BuildOptions& opts);
 
 struct BuildResult {
     bool ok = false;

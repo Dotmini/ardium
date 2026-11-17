@@ -46,6 +46,8 @@ static void printHelp() {
               << bold("OPTIONS:") << "\n"
               << "    -o <path>              Output path for `build`\n"
               << "    --release, -O          Optimize harder (-O3)\n"
+              << "    --mm=gc|arc            Memory management: generational GC (default) or\n"
+              << "                           automatic reference counting (also: $ARC_MM)\n"
               << "    --emit-c <path>        Also write the generated C code\n"
               << "    -q, --quiet            Hide warnings\n\n"
               << "When no file is given inside a project (arc.toml), src/main.ar is used.\n"
@@ -64,6 +66,7 @@ struct Args {
     std::string emitC;
     bool release = false;
     bool quiet = false;
+    std::string mm;                 // --mm=gc|arc
     std::vector<std::string> rest;  // program arguments / extra files
 };
 
@@ -81,6 +84,13 @@ static bool parseArgs(int argc, char** argv, int start, Args& a, bool passThroug
         else if (s == "-O" || s == "-O3" || s == "--release") a.release = true;
         else if (s == "-O0" || s == "--debug") a.release = false;
         else if (s == "-q" || s == "--quiet") a.quiet = true;
+        else if (s.rfind("--mm=", 0) == 0 || (s == "--mm" && i + 1 < argc)) {
+            a.mm = s == "--mm" ? argv[++i] : s.substr(5);
+            if (a.mm != "gc" && a.mm != "arc") {
+                std::cerr << "error: unknown memory mode '" << a.mm << "' (expected gc or arc)\n";
+                return false;
+            }
+        }
         else if (s == "--") { continue; }
         else if (s.size() > 1 && s[0] == '-' && a.file.empty()) {
             std::cerr << "error: unknown option '" << s << "'\n";
@@ -132,6 +142,7 @@ static int cmdRun(int argc, char** argv) {
     Args a;
     if (!parseArgs(argc, argv, 2, a, true) || !resolveFile(a, "run")) return 1;
     BuildOptions o;
+    o.mm = a.mm;
     o.release = a.release;
     o.quietWarnings = a.quiet;
     o.emitC = a.emitC;
@@ -145,6 +156,7 @@ static int cmdBuild(int argc, char** argv) {
     a.release = false;
     if (!parseArgs(argc, argv, 2, a, false) || !resolveFile(a, "build")) return 1;
     BuildOptions o;
+    o.mm = a.mm;
     o.release = true;  // builds are always optimized; --release adds nothing extra
     o.quietWarnings = a.quiet;
     o.emitC = a.emitC;
@@ -170,6 +182,7 @@ static int cmdCheck(int argc, char** argv) {
     Args a;
     if (!parseArgs(argc, argv, 2, a, false) || !resolveFile(a, "check")) return 1;
     BuildOptions o;
+    o.mm = a.mm;
     o.checkOnly = true;
     o.quietWarnings = a.quiet;
     BuildResult r = arc::buildProgram(a.file, o);
@@ -216,6 +229,7 @@ static int cmdTest(int argc, char** argv) {
         std::cout << green("     Running") << " " << f << "\n";
         std::cout.flush();
         BuildOptions o;
+        o.mm = a.mm;
         o.testMode = true;
         o.quietWarnings = a.quiet;
         BuildResult r = arc::buildProgram(f, o);
@@ -273,6 +287,7 @@ static int cmdDev(int argc, char** argv) {
             std::cout << "\x1b[2J\x1b[H" << green("   Compiling") << " " << a.file << "\n";
             std::cout.flush();
             BuildOptions o;
+            o.mm = a.mm;
             BuildResult r = arc::buildProgram(a.file, o);
             if (r.ok) {
                 int rc = runBinary(r.binary, fs::path(a.file).stem().string(), a.rest, false);
@@ -288,6 +303,7 @@ static int cmdApp(int argc, char** argv) {
     if (!parseArgs(argc, argv, 2, a, false) || !resolveFile(a, "app")) return 1;
     std::string appName = a.out.empty() ? fs::path(a.file).stem().string() : a.out;
     BuildOptions o;
+    o.mm = a.mm;
     o.release = true;
     BuildResult r = arc::buildProgram(a.file, o);
     if (!r.ok) return 1;

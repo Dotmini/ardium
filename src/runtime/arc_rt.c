@@ -69,18 +69,35 @@ struct ArcTD {
     const int *vcount;
 };
 
+/* Memory management is chosen when a program is compiled:
+ *   ARC_MM_RC 0  generational mark & sweep garbage collector (default, `--mm=gc`)
+ *   ARC_MM_RC 1  automatic reference counting with a backup cycle collector (`--mm=arc`)
+ * Both use the same object header and the same write barrier (arc_wb), which
+ * the compiler emits for every store of a reference into a heap object. */
+#ifndef ARC_MM_RC
+#define ARC_MM_RC 0
+#endif
+
+/* 16-byte object header. `flags` holds the state bits below plus the size
+ * class in its top byte; `rc` counts references from other heap objects
+ * (ARC mode only: references from locals are found by scanning the stack). */
 typedef struct ArcObj {
-    struct ArcObj *next;
     const ArcTD *td;
     uint32_t flags;
-    uint32_t _pad;
+    uint32_t rc;
 } ArcObj;
 #define ARC_F_MARK 1u
-#define ARC_F_STATIC 2u
-#define ARC_F_FREE 4u
-#define ARC_F_LARGE 8u
+#define ARC_F_STATIC 2u   /* compile-time constant object: never freed */
+#define ARC_F_FREE 4u     /* a free slot */
+#define ARC_F_LARGE 8u    /* malloc'd individually */
+#define ARC_F_OLD 16u     /* GC: survived a collection */
+#define ARC_F_REM 32u     /* GC: in the remembered set */
+#define ARC_F_ZCT 64u     /* ARC: in the zero-count table */
+#define ARC_F_ROOT 128u   /* ARC: referenced from a root (during reconciliation) */
+#define ARC_CLS_SHIFT 24
+#define ARC_RC_STATIC 0x40000000u  /* static objects start with this count, so it never reaches 0 */
 
-typedef struct { ArcObj h; int64_t len; const char *data; } ArcStr;
+typedef struct ArcStrS { ArcObj h; int64_t len; const char *data; } ArcStr;
 typedef struct { ArcObj h; int64_t len, cap; size_t esize; char *data; } ArcArr;
 typedef struct {
     ArcObj h;
@@ -126,12 +143,13 @@ static const ArcTD arc_td_fn = {ARC_K_FN, 1, sizeof(void *), 0, 0, 0, 0, 0, 0, 0
 /* ---------------------------------------------------------------- state -- */
 
 static ArcFrame *arc_ftop = NULL;
-static ArcObj *arc_heap_list = NULL;
-static size_t arc_alloc_bytes = 0;
-static size_t arc_live_bytes = 0;
-static size_t arc_gc_threshold = (size_t)8 << 20;
+static const struct ArcStrS *arc_hcache_s = NULL;  /* last hashed string (see arc_hash_key) */
+static uint64_t arc_hcache_h = 0;
+static size_t arc_alloc_bytes = 0;   /* bytes allocated since the last collection */
+static size_t arc_live_bytes = 0;    /* bytes surviving the last full collection */
 static int arc_gc_inhibit = 0;
-static int arc_gc_stress = 0;
+static int arc_gc_stress = 0;        /* ARC_GC_STRESS: collect on every allocation */
+static int arc_gc_verify = 0;        /* ARC_GC_VERIFY (implied by stress): check the heap after each collection */
 static size_t arc_gc_count = 0;
 static void ***arc_groots = NULL;
 static size_t arc_ngroots = 0, arc_capgroots = 0;
@@ -197,69 +215,79 @@ static void *arc_xmalloc(size_t n) { void *p = malloc(n ? n : 1); if (!p) arc_oo
 static void *arc_xcalloc(size_t n) { void *p = calloc(1, n ? n : 1); if (!p) arc_oom(); return p; }
 static void *arc_xrealloc(void *p, size_t n) { void *q = realloc(p, n ? n : 1); if (!q) arc_oom(); return q; }
 
+static void arc_gc_stats(void);
+static int arc_stats = 0;  /* ARC_GC_STATS: print heap statistics at exit */
+
 ARC_NORET static void arc_exit(int64_t code) {
     arc_flush_all();
+    if (arc_stats) arc_gc_stats();
     exit((int)code);
 }
 
 /* ------------------------------------------------------------------- GC -- */
 
-static ArcObj **arc_mstack = NULL;
-static size_t arc_mlen = 0, arc_mcap = 0;
-
-static inline void arc_mark(void *p) {
-    ArcObj *o = (ArcObj *)p;
-    if (!o || (o->flags & (ARC_F_MARK | ARC_F_STATIC))) return;
-    o->flags |= ARC_F_MARK;
-    if (arc_mlen == arc_mcap) {
-        arc_mcap = arc_mcap ? arc_mcap * 2 : 1024;
-        arc_mstack = (ArcObj **)arc_xrealloc(arc_mstack, arc_mcap * sizeof(ArcObj *));
-    }
-    arc_mstack[arc_mlen++] = o;
-}
-
-static void arc_mark_value(const void *p, const ArcTD *td) {
-    if (td->is_heap) arc_mark(*(void *const *)p);
-    else if (td->kind == ARC_K_RES) arc_mark(*(void *const *)p);  /* {err, val}: err is first */
-}
 static inline int arc_td_has_ptr(const ArcTD *td) { return td->is_heap || td->kind == ARC_K_RES; }
 
-static void arc_scan(ArcObj *o) {
-    const ArcTD *td = o->td;
-    switch (td->kind) {
-    case ARC_K_ARR: {
-        ArcArr *a = (ArcArr *)o;
-        if (td->elem->is_heap) {
-            void **d = (void **)a->data;
-            for (int64_t i = 0; i < a->len; i++) arc_mark(d[i]);
-        } else if (td->elem->kind == ARC_K_RES) {
-            for (int64_t i = 0; i < a->len; i++) arc_mark(*(void **)(a->data + (size_t)i * a->esize));
-        }
-        break;
-    }
-    case ARC_K_MAP: {
-        ArcMap *m = (ArcMap *)o;
-        int kh = td->key->is_heap, vh = arc_td_has_ptr(td->elem);
-        if (!kh && !vh) break;
-        for (int64_t i = 0; i < m->nent; i++) {
-            char *e = m->ent + (size_t)i * m->esize;
-            if (!e[8]) continue;
-            if (kh) arc_mark(*(void **)(e + m->koff));
-            if (vh) arc_mark_value(e + m->voff, td->elem);
-        }
-        break;
-    }
-    case ARC_K_STRUCT: case ARC_K_ENUM:
-        for (int i = 0; i < td->nfields; i++)
-            arc_mark_value((char *)o + td->fields[i].offset, td->fields[i].td);
-        break;
-    case ARC_K_ERR:
-        arc_mark(((ArcErr *)o)->msg);
-        break;
-    default:
-        break;
-    }
+/* VISIT(p) for every reference held by object `o`. A value whose descriptor
+ * has is_heap is a pointer; a `!T` stored by value starts with its error
+ * pointer, so in both cases the reference is the first word of the value. */
+#define ARC_FOR_CHILDREN(o, VISIT) do {                                            \
+    ArcObj *o_ = (o);                                                              \
+    const ArcTD *td_ = o_->td;                                                     \
+    switch (td_->kind) {                                                           \
+    case ARC_K_ARR: {                                                              \
+        ArcArr *a_ = (ArcArr *)o_;                                                 \
+        if (arc_td_has_ptr(td_->elem))                                             \
+            for (int64_t i_ = 0; i_ < a_->len; i_++)                               \
+                VISIT(*(void **)(a_->data + (size_t)i_ * a_->esize));              \
+        break;                                                                     \
+    }                                                                              \
+    case ARC_K_MAP: {                                                              \
+        ArcMap *m_ = (ArcMap *)o_;                                                 \
+        int kh_ = td_->key->is_heap, vh_ = arc_td_has_ptr(td_->elem);              \
+        if (!kh_ && !vh_) break;                                                   \
+        for (int64_t i_ = 0; i_ < m_->nent; i_++) {                                \
+            char *e_ = m_->ent + (size_t)i_ * m_->esize;                           \
+            if (!e_[8]) continue;                                                  \
+            if (kh_) VISIT(*(void **)(e_ + m_->koff));                             \
+            if (vh_) VISIT(*(void **)(e_ + m_->voff));                             \
+        }                                                                          \
+        break;                                                                     \
+    }                                                                              \
+    case ARC_K_STRUCT: case ARC_K_ENUM:                                            \
+        for (int f_ = 0; f_ < td_->nfields; f_++)                                  \
+            if (arc_td_has_ptr(td_->fields[f_].td))                                \
+                VISIT(*(void **)((char *)o_ + td_->fields[f_].offset));            \
+        break;                                                                     \
+    case ARC_K_ERR:                                                                \
+        VISIT(((ArcErr *)o_)->msg);                                                \
+        break;                                                                     \
+    default:                                                                       \
+        break;                                                                     \
+    }                                                                              \
+} while (0)
+
+/* VISIT(p) for every root: shadow-stack slots and registered globals. */
+#define ARC_FOR_ROOTS(VISIT) do {                                                  \
+    for (ArcFrame *f_ = arc_ftop; f_; f_ = f_->prev)                               \
+        for (int64_t s_ = 0; s_ < f_->n; s_++) VISIT(*f_->slots[s_]);              \
+    for (size_t g_ = 0; g_ < arc_ngroots; g_++) VISIT(*arc_groots[g_]);            \
+} while (0)
+
+static inline uint64_t arc_ptr_hash(uint64_t x) { x ^= x >> 33; x *= 0xff51afd7ed558ccdULL; x ^= x >> 33; return x; }
+
+/* growable array of object pointers */
+typedef struct { ArcObj **p; size_t n, cap; } ArcVec;
+ARC_COLD static void arc_vec_grow(ArcVec *v) {
+    v->cap = v->cap ? v->cap * 2 : 1024;
+    v->p = (ArcObj **)arc_xrealloc(v->p, v->cap * sizeof(ArcObj *));
 }
+static inline void arc_vec_push(ArcVec *v, ArcObj *o) {
+    if (ARC_UNLIKELY(v->n == v->cap)) arc_vec_grow(v);
+    v->p[v->n++] = o;
+}
+
+static ArcVec arc_mstack;  /* mark stack */
 
 static size_t arc_obj_bytes(ArcObj *o) {
     switch (o->td->kind) {
@@ -285,12 +313,11 @@ static void arc_finalize(ArcObj *o) {
 
 /* Small objects (<= 512 bytes) live in 64 KiB pages split into fixed-size
  * slots, one page list per size class; freed slots go on a per-class free
- * list. Larger objects are malloc'd individually and kept on a linked list. */
+ * list. Larger objects are malloc'd individually behind a list link. */
 #define ARC_NCLASS 15
 #define ARC_PAGE_SIZE ((size_t)64 << 10)
 #define ARC_SMALL_MAX 512
 static const uint32_t arc_class_size[ARC_NCLASS] = {32, 48, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 448, 512};
-static uint8_t arc_class_of[ARC_SMALL_MAX / 16 + 1];
 
 typedef struct ArcPage {
     struct ArcPage *next;
@@ -298,50 +325,96 @@ typedef struct ArcPage {
 } ArcPage;
 #define ARC_PAGE_HDR ((sizeof(ArcPage) + 15) & ~(size_t)15)
 
+typedef struct ArcFreeSlot { ArcObj h; struct ArcFreeSlot *next; } ArcFreeSlot;
+typedef struct ArcLarge { struct ArcLarge *next, *prev; } ArcLarge;  /* precedes a large object */
+
 static ArcPage *arc_pages[ARC_NCLASS];
 static ArcPage *arc_cur_page[ARC_NCLASS];
-static ArcObj *arc_free_list[ARC_NCLASS];
+static ArcFreeSlot *arc_free_list[ARC_NCLASS];
+static ArcLarge arc_large = {&arc_large, &arc_large};
 
-static void arc_init_classes(void) {
-    int c = 0;
-    for (int i = 0; i <= ARC_SMALL_MAX / 16; i++) {
-        while (arc_class_size[c] < (uint32_t)i * 16) c++;
-        arc_class_of[i] = (uint8_t)c;
-    }
+/* size class for a small object; folds to a constant for a constant size */
+static inline int arc_size_class(size_t size) {
+    if (size <= 128) return size <= 32 ? 0 : (int)((size + 15) >> 4) - 2;  /* 32, 48, ..., 128 */
+    if (size <= 256) return 6 + (int)((size - 128 + 31) >> 5);             /* 160, 192, 224, 256 */
+    return 10 + (int)((size - 256 + 63) >> 6);                             /* 320, 384, 448, 512 */
 }
 
 static inline ArcObj *arc_page_slot(ArcPage *p, uint32_t i) {
     return (ArcObj *)((char *)p + ARC_PAGE_HDR + (size_t)i * arc_class_size[p->cls]);
 }
 
-static ArcObj *arc_small_alloc(int cls, size_t size) {
-    ArcObj *o = arc_free_list[cls];
-    if (o) {
-        arc_free_list[cls] = o->next;
-        memset(o, 0, size);
-        return o;
+ARC_COLD static ArcPage *arc_new_page(int cls) {
+    ArcPage *p = (ArcPage *)arc_xcalloc(ARC_PAGE_SIZE);
+    p->cls = (uint32_t)cls;
+    p->nslots = (uint32_t)((ARC_PAGE_SIZE - ARC_PAGE_HDR) / arc_class_size[cls]);
+    p->next = arc_pages[cls];
+    arc_pages[cls] = p;
+    arc_cur_page[cls] = p;
+    return p;
+}
+
+static inline ArcObj *arc_small_alloc(int cls, size_t size) {
+    ArcFreeSlot *f = arc_free_list[cls];
+    if (f) {
+        arc_free_list[cls] = f->next;
+        memset(f, 0, size);
+        return &f->h;
     }
     ArcPage *p = arc_cur_page[cls];
-    if (!p || p->bump == p->nslots) {
-        p = (ArcPage *)arc_xcalloc(ARC_PAGE_SIZE);
-        p->cls = (uint32_t)cls;
-        p->nslots = (uint32_t)((ARC_PAGE_SIZE - ARC_PAGE_HDR) / arc_class_size[cls]);
-        p->next = arc_pages[cls];
-        arc_pages[cls] = p;
-        arc_cur_page[cls] = p;
-    }
+    if (ARC_UNLIKELY(!p || p->bump == p->nslots)) p = arc_new_page(cls);
     return arc_page_slot(p, p->bump++);  /* fresh page memory is already zero */
 }
 
-static void arc_gc_collect(void) {
-    arc_gc_count++;
-    for (ArcFrame *f = arc_ftop; f; f = f->prev)
-        for (int64_t i = 0; i < f->n; i++) arc_mark(*f->slots[i]);
-    for (size_t i = 0; i < arc_ngroots; i++) arc_mark(*arc_groots[i]);
-    while (arc_mlen) arc_scan(arc_mstack[--arc_mlen]);
+/* Returns the memory of a dead (already finalized) object to the allocator. */
+static void arc_release_mem(ArcObj *o) {
+    if (o->flags & ARC_F_LARGE) {
+        ArcLarge *l = (ArcLarge *)o - 1;
+        l->prev->next = l->next;
+        l->next->prev = l->prev;
+        free(l);
+        return;
+    }
+    uint32_t cls = o->flags >> ARC_CLS_SHIFT;
+    if (ARC_UNLIKELY(arc_gc_verify))  /* poison: a dangling read now fails loudly */
+        memset((char *)o + sizeof(ArcFreeSlot), 0xDB, arc_class_size[cls] - sizeof(ArcFreeSlot));
+    o->td = NULL;
+    o->rc = 0;
+    o->flags = ARC_F_FREE | (cls << ARC_CLS_SHIFT);
+    ArcFreeSlot *f = (ArcFreeSlot *)o;
+    f->next = arc_free_list[cls];
+    arc_free_list[cls] = f;
+}
 
+/* full collection: everything reachable from the roots */
+static inline void arc_mark(void *p) {
+    ArcObj *o = (ArcObj *)p;
+    if (!o || (o->flags & (ARC_F_MARK | ARC_F_STATIC))) return;
+    o->flags |= ARC_F_MARK;
+    arc_vec_push(&arc_mstack, o);
+}
+static void arc_mark_drain(void) {
+    while (arc_mstack.n) {
+        ArcObj *o = arc_mstack.p[--arc_mstack.n];
+        ARC_FOR_CHILDREN(o, arc_mark);
+    }
+}
+
+/* Calls fn on every allocated (non-free) object. */
+static void arc_heap_walk(void (*fn)(ArcObj *)) {
+    for (int c = 0; c < ARC_NCLASS; c++)
+        for (ArcPage *p = arc_pages[c]; p; p = p->next)
+            for (uint32_t i = 0; i < p->bump; i++) {
+                ArcObj *o = arc_page_slot(p, i);
+                if (!(o->flags & ARC_F_FREE)) fn(o);
+            }
+    for (ArcLarge *l = arc_large.next; l != &arc_large; l = l->next) fn((ArcObj *)(l + 1));
+}
+
+/* Frees every unmarked object and unmarks the rest; returns the live bytes.
+ * Pages left without a live object go back to the system. */
+static size_t arc_sweep_all(void) {
     size_t live = 0;
-    /* sweep small-object pages */
     for (int c = 0; c < ARC_NCLASS; c++) {
         arc_free_list[c] = NULL;
         ArcPage **pp = &arc_pages[c];
@@ -353,9 +426,11 @@ static void arc_gc_collect(void) {
                 if (o->flags & ARC_F_FREE) continue;
                 if (o->flags & ARC_F_MARK) { nlive++; continue; }
                 arc_finalize(o);
-                o->flags = ARC_F_FREE;
+                o->td = NULL;
+                o->rc = 0;
+                o->flags = ARC_F_FREE | ((uint32_t)c << ARC_CLS_SHIFT);
             }
-            if (nlive == 0 && p != arc_cur_page[c]) {  /* whole page is garbage: return it */
+            if (nlive == 0 && p != arc_cur_page[c]) {
                 *pp = p->next;
                 free(p);
                 continue;
@@ -363,52 +438,458 @@ static void arc_gc_collect(void) {
             for (uint32_t i = 0; i < p->bump; i++) {
                 ArcObj *o = arc_page_slot(p, i);
                 if (o->flags & ARC_F_FREE) {
-                    o->next = arc_free_list[c];
-                    arc_free_list[c] = o;
+                    if (ARC_UNLIKELY(arc_gc_verify))
+                        memset((char *)o + sizeof(ArcFreeSlot), 0xDB, arc_class_size[c] - sizeof(ArcFreeSlot));
+                    ((ArcFreeSlot *)o)->next = arc_free_list[c];
+                    arc_free_list[c] = (ArcFreeSlot *)o;
                 } else {
-                    o->flags &= ~ARC_F_MARK;
+                    o->flags = (o->flags & ~ARC_F_MARK) | ARC_F_OLD;
                     live += arc_obj_bytes(o);
                 }
             }
             pp = &p->next;
         }
     }
-    /* sweep large objects */
-    ArcObj **lp = &arc_heap_list;
-    while (*lp) {
-        ArcObj *o = *lp;
+    for (ArcLarge *l = arc_large.next; l != &arc_large;) {
+        ArcLarge *next = l->next;
+        ArcObj *o = (ArcObj *)(l + 1);
         if (o->flags & ARC_F_MARK) {
-            o->flags &= ~ARC_F_MARK;
+            o->flags = (o->flags & ~ARC_F_MARK) | ARC_F_OLD;
             live += arc_obj_bytes(o);
-            lp = &o->next;
         } else {
-            *lp = o->next;
             arc_finalize(o);
-            free(o);
+            l->prev->next = l->next;
+            l->next->prev = l->prev;
+            free(l);
         }
+        l = next;
     }
-    arc_live_bytes = live;
-    arc_alloc_bytes = 0;
-    size_t min_thr = (size_t)8 << 20;
-    arc_gc_threshold = live > min_thr ? live : min_thr;
+    return live;
 }
 
-static void *arc_alloc(const ArcTD *td, size_t size) {
-    if (ARC_UNLIKELY(arc_alloc_bytes >= arc_gc_threshold || arc_gc_stress) && !arc_gc_inhibit)
-        arc_gc_collect();
-    ArcObj *o;
-    if (ARC_LIKELY(size <= ARC_SMALL_MAX)) {
-        int cls = arc_class_of[(size + 15) >> 4];
-        o = arc_small_alloc(cls, size);
-        arc_alloc_bytes += arc_class_size[cls];
-    } else {
-        o = (ArcObj *)arc_xcalloc(size);
-        o->flags = ARC_F_LARGE;
-        o->next = arc_heap_list;
-        arc_heap_list = o;
-        arc_alloc_bytes += size;
+/* --- heap verification (ARC_GC_VERIFY / ARC_GC_STRESS) --- */
+
+static int arc_verify_pre = 0;  /* before a minor collection: also check the write-barrier invariant */
+
+ARC_COLD ARC_NORET static void arc_heap_corrupt(const char *what, const ArcObj *holder, const ArcObj *ref) {
+    fflush(stdout);
+    fprintf(stderr, "fatal: heap check failed: %s\n  holder: %p (%s)\n  reference: %p\n", what, (const void *)holder,
+            holder && holder->td ? (holder->td->name ? holder->td->name : "builtin") : "?", (const void *)ref);
+    fflush(stderr);
+    abort();
+}
+
+static void arc_verify_ref(ArcObj *holder, void *p) {
+    ArcObj *c = (ArcObj *)p;
+    if (!c) return;
+    if (c->flags & ARC_F_FREE) arc_heap_corrupt("reference to a freed object", holder, c);
+    if (!ARC_MM_RC && arc_verify_pre && (holder->flags & (ARC_F_OLD | ARC_F_REM)) == ARC_F_OLD &&
+        !(c->flags & (ARC_F_OLD | ARC_F_STATIC)))
+        arc_heap_corrupt("an old object points to a young one without a write barrier", holder, c);
+}
+#define ARC_VERIFY_CHILD(c) arc_verify_ref(o, (c))
+static void arc_verify_obj(ArcObj *o) { ARC_FOR_CHILDREN(o, ARC_VERIFY_CHILD); }
+static void arc_verify_root(void *p) {
+    ArcObj *o = (ArcObj *)p;
+    if (o && (o->flags & ARC_F_FREE)) arc_heap_corrupt("a root refers to a freed object", NULL, o);
+}
+static void arc_heap_verify(int pre) {
+    arc_verify_pre = pre;
+    ARC_FOR_ROOTS(arc_verify_root);
+    arc_heap_walk(arc_verify_obj);
+}
+
+#if !ARC_MM_RC
+/* ---- generational collector -------------------------------------------
+ * New objects are young. A minor collection traces only young objects, from
+ * the roots and from the remembered set (old objects that had a reference
+ * stored into them since the last collection), frees the unreachable young
+ * objects and promotes the rest. A major collection traces everything. */
+static ArcVec arc_young, arc_remset;
+static size_t arc_old_bytes = 0;
+static size_t arc_nursery = (size_t)8 << 20;
+static size_t arc_major_at = (size_t)32 << 20;
+
+static inline void arc_mark_young(void *p) {
+    ArcObj *o = (ArcObj *)p;
+    if (!o || (o->flags & (ARC_F_MARK | ARC_F_OLD | ARC_F_STATIC))) return;
+    o->flags |= ARC_F_MARK;
+    arc_vec_push(&arc_mstack, o);
+}
+
+ARC_COLD static void arc_remember(ArcObj *h) {
+    h->flags |= ARC_F_REM;
+    arc_vec_push(&arc_remset, h);
+}
+
+/* Write barrier: call before storing reference `newp` into heap object `holder`
+ * (replacing `oldp`). Only an old object receiving a young reference matters. */
+static inline void arc_wb(void *holder, void *oldp, void *newp) {
+    (void)oldp;
+    ArcObj *h = (ArcObj *)holder, *n = (ArcObj *)newp;
+    if (n && ARC_UNLIKELY((h->flags & (ARC_F_OLD | ARC_F_REM)) == ARC_F_OLD) && !(n->flags & (ARC_F_OLD | ARC_F_STATIC)))
+        arc_remember(h);
+}
+/* a reference stored into a freshly allocated object */
+#define ARC_INIT_REF(p) ((void)0)
+/* a reference that left a container (pop, remove, clear) */
+#define ARC_DROP_REF(p) ((void)0)
+
+static void arc_gc_minor(void) {
+    ARC_FOR_ROOTS(arc_mark_young);
+    for (size_t i = 0; i < arc_remset.n; i++) {
+        ArcObj *o = arc_remset.p[i];
+        o->flags &= ~ARC_F_REM;
+        ARC_FOR_CHILDREN(o, arc_mark_young);
     }
+    arc_remset.n = 0;
+    while (arc_mstack.n) {
+        ArcObj *o = arc_mstack.p[--arc_mstack.n];
+        ARC_FOR_CHILDREN(o, arc_mark_young);
+    }
+    for (size_t i = 0; i < arc_young.n; i++) {
+        ArcObj *o = arc_young.p[i];
+        if (o->flags & ARC_F_MARK) {
+            o->flags = (o->flags & ~ARC_F_MARK) | ARC_F_OLD;
+            arc_old_bytes += arc_obj_bytes(o);
+        } else {
+            arc_finalize(o);
+            arc_release_mem(o);
+        }
+    }
+    arc_young.n = 0;
+}
+
+static void arc_gc_major(void) {
+    for (size_t i = 0; i < arc_remset.n; i++) arc_remset.p[i]->flags &= ~ARC_F_REM;
+    arc_remset.n = 0;
+    ARC_FOR_ROOTS(arc_mark);
+    arc_mark_drain();
+    arc_young.n = 0;
+    size_t live = arc_sweep_all();
+    arc_live_bytes = arc_old_bytes = live;
+    arc_major_at = live * 2 > ((size_t)32 << 20) ? live * 2 : ((size_t)32 << 20);
+}
+
+ARC_COLD static void arc_gc_collect(void) {
+    arc_gc_count++;
+    arc_hcache_s = NULL;
+    if (arc_gc_verify) arc_heap_verify(1);
+    if (arc_old_bytes >= arc_major_at || (arc_gc_stress && (arc_gc_count & 7) == 0)) arc_gc_major();
+    else arc_gc_minor();
+    arc_alloc_bytes = 0;
+    if (arc_gc_verify) arc_heap_verify(0);
+}
+
+/* bytes of out-of-line buffers (array data, map tables) allocated for `o` */
+static inline void arc_account(ArcObj *o, size_t bytes) {
+    arc_alloc_bytes += bytes;
+    if (o->flags & ARC_F_OLD) arc_old_bytes += bytes;
+}
+
+#else
+/* ---- automatic reference counting --------------------------------------
+ * Every object counts the references to it from other heap objects; the
+ * compiler emits arc_wb / ARC_INIT_REF for each store of a reference. An
+ * object whose count is zero (it may still be referenced from a local) waits
+ * in the zero-count table; reconciliation frees those that no stack slot or
+ * global refers to, recursively. Reference cycles are reclaimed by an
+ * occasional full mark & sweep (the cycle collector). */
+static ArcVec arc_zct, arc_rcwork;
+static size_t arc_zct_limit = 4096;
+static size_t arc_heap_bytes = 0;
+static size_t arc_cycle_at = (size_t)64 << 20;
+
+ARC_COLD ARC_NORET static void arc_rc_underflow(const ArcObj *o) {
+    arc_heap_corrupt("reference count underflow", NULL, o);
+}
+
+static inline void arc_rc_inc(void *p) {
+    if (p) ((ArcObj *)p)->rc++;
+}
+static inline void arc_rc_dec(void *p) {
+    ArcObj *o = (ArcObj *)p;
+    if (!o) return;
+    if (ARC_UNLIKELY(o->rc == 0)) arc_rc_underflow(o);
+    if (--o->rc == 0 && !(o->flags & ARC_F_ZCT)) {
+        o->flags |= ARC_F_ZCT;
+        arc_vec_push(&arc_zct, o);
+    }
+}
+static inline void arc_wb(void *holder, void *oldp, void *newp) {
+    (void)holder;
+    arc_rc_inc(newp);
+    arc_rc_dec(oldp);
+}
+#define ARC_INIT_REF(p) arc_rc_inc((void *)(p))
+#define ARC_DROP_REF(p) arc_rc_dec((void *)(p))
+
+static inline void arc_account(ArcObj *o, size_t bytes) {
+    (void)o;
+    arc_alloc_bytes += bytes;
+    arc_heap_bytes += bytes;
+}
+
+static inline void arc_root_set(void *p) { if (p) ((ArcObj *)p)->flags |= ARC_F_ROOT; }
+static inline void arc_root_clear(void *p) { if (p) ((ArcObj *)p)->flags &= ~ARC_F_ROOT; }
+
+/* a child of a freed object loses a reference */
+#define ARC_RC_DROP(c) do {                                                        \
+    ArcObj *c_ = (ArcObj *)(c);                                                    \
+    if (c_) {                                                                      \
+        if (ARC_UNLIKELY(c_->rc == 0)) arc_rc_underflow(c_);                       \
+        if (--c_->rc == 0 && !(c_->flags & ARC_F_ZCT)) {                           \
+            if (c_->flags & ARC_F_ROOT) {                                          \
+                c_->flags |= ARC_F_ZCT;                                            \
+                arc_vec_push(&arc_zct, c_);                                        \
+            } else {                                                               \
+                arc_vec_push(&arc_rcwork, c_);                                     \
+            }                                                                      \
+        }                                                                          \
+    }                                                                              \
+} while (0)
+
+static void arc_rc_free(ArcObj *o) {
+    arc_vec_push(&arc_rcwork, o);
+    while (arc_rcwork.n) {
+        ArcObj *x = arc_rcwork.p[--arc_rcwork.n];
+        ARC_FOR_CHILDREN(x, ARC_RC_DROP);
+        size_t b;
+        int kind = x->td->kind;
+        if (kind == ARC_K_ARR || kind == ARC_K_MAP || (x->flags & ARC_F_LARGE)) {
+            b = arc_obj_bytes(x);
+            arc_finalize(x);
+        } else {
+            b = arc_class_size[x->flags >> ARC_CLS_SHIFT];
+        }
+        arc_heap_bytes = arc_heap_bytes > b ? arc_heap_bytes - b : 0;
+        arc_release_mem(x);
+    }
+}
+
+/* --- exact count check (ARC_GC_VERIFY / ARC_GC_STRESS) --- */
+static ArcObj **arc_vobjs;
+static uint32_t *arc_vcount;
+static size_t arc_vn, arc_vcap, arc_vhcap;
+static int64_t *arc_vhash;
+
+static void arc_vcollect(ArcObj *o) {
+    if (arc_vn == arc_vcap) {
+        arc_vcap = arc_vcap ? arc_vcap * 2 : 1024;
+        arc_vobjs = (ArcObj **)arc_xrealloc(arc_vobjs, arc_vcap * sizeof(ArcObj *));
+    }
+    arc_vobjs[arc_vn++] = o;
+}
+static int64_t arc_vfind(const ArcObj *o) {
+    size_t h = (size_t)arc_ptr_hash((uint64_t)(uintptr_t)o) & (arc_vhcap - 1);
+    while (arc_vhash[h] >= 0) {
+        if (arc_vobjs[arc_vhash[h]] == o) return arc_vhash[h];
+        h = (h + 1) & (arc_vhcap - 1);
+    }
+    return -1;
+}
+static void arc_vref(ArcObj *holder, void *p) {
+    ArcObj *c = (ArcObj *)p;
+    if (!c || (c->flags & ARC_F_STATIC)) return;
+    int64_t i = arc_vfind(c);
+    if (i < 0) arc_heap_corrupt("reference to an object that is not on the heap", holder, c);
+    arc_vcount[i]++;
+}
+#define ARC_VREF_CHILD(c) arc_vref(o, (c))
+static void arc_vcount_obj(ArcObj *o) { ARC_FOR_CHILDREN(o, ARC_VREF_CHILD); }
+
+static void arc_rc_verify(void) {
+    arc_vn = 0;
+    arc_heap_walk(arc_vcollect);
+    arc_vhcap = 16;
+    while (arc_vhcap < arc_vn * 2) arc_vhcap *= 2;
+    arc_vhash = (int64_t *)arc_xmalloc(arc_vhcap * sizeof(int64_t));
+    memset(arc_vhash, 0xFF, arc_vhcap * sizeof(int64_t));
+    for (size_t i = 0; i < arc_vn; i++) {
+        size_t h = (size_t)arc_ptr_hash((uint64_t)(uintptr_t)arc_vobjs[i]) & (arc_vhcap - 1);
+        while (arc_vhash[h] >= 0) h = (h + 1) & (arc_vhcap - 1);
+        arc_vhash[h] = (int64_t)i;
+    }
+    arc_vcount = (uint32_t *)arc_xcalloc(arc_vn * sizeof(uint32_t) + 1);
+    for (size_t i = 0; i < arc_vn; i++) arc_vcount_obj(arc_vobjs[i]);
+    for (size_t i = 0; i < arc_vn; i++) {
+        ArcObj *o = arc_vobjs[i];
+        if (o->rc != arc_vcount[i]) {
+            fflush(stdout);
+            fprintf(stderr, "fatal: reference count of %p (%s) is %u, but %u heap references exist\n", (void *)o,
+                    o->td->name ? o->td->name : "builtin", o->rc, arc_vcount[i]);
+            abort();
+        }
+        if (o->rc == 0 && !(o->flags & ARC_F_ZCT)) arc_heap_corrupt("an object with no references is not tracked", NULL, o);
+    }
+    free(arc_vhash);
+    free(arc_vcount);
+}
+
+static void arc_rc_reconcile(void) {
+    if (arc_gc_verify) arc_rc_verify();
+    size_t nroots = 0;
+    ARC_FOR_ROOTS(arc_root_set);
+    size_t w = 0;
+    for (size_t i = 0; i < arc_zct.n; i++) {
+        ArcObj *o = arc_zct.p[i];
+        if (o->rc) { o->flags &= ~ARC_F_ZCT; continue; }
+        if (o->flags & ARC_F_ROOT) { arc_zct.p[w++] = o; continue; }
+        o->flags &= ~ARC_F_ZCT;
+        arc_rc_free(o);
+    }
+    arc_zct.n = w;
+    for (ArcFrame *f = arc_ftop; f; f = f->prev)
+        for (int64_t s = 0; s < f->n; s++) { arc_root_clear(*f->slots[s]); nroots++; }
+    for (size_t g = 0; g < arc_ngroots; g++) { arc_root_clear(*arc_groots[g]); nroots++; }
+    size_t lim = 4096;
+    if (2 * w > lim) lim = 2 * w;
+    if (2 * nroots > lim) lim = 2 * nroots;
+    arc_zct_limit = lim;
+}
+
+/* garbage found by the cycle collector drops its references to live objects */
+#define ARC_RC_DROP_LIVE(c) do { ArcObj *c_ = (ArcObj *)(c); if (c_ && (c_->flags & ARC_F_MARK)) arc_rc_dec(c_); } while (0)
+static void arc_rc_unlink_garbage(ArcObj *o) {
+    if (!(o->flags & ARC_F_MARK)) ARC_FOR_CHILDREN(o, ARC_RC_DROP_LIVE);
+}
+
+static void arc_rc_cycle_collect(void) {
+    arc_rc_reconcile();
+    ARC_FOR_ROOTS(arc_mark);
+    arc_mark_drain();
+    arc_heap_walk(arc_rc_unlink_garbage);
+    size_t live = arc_sweep_all();
+    arc_live_bytes = arc_heap_bytes = live;
+    arc_cycle_at = live * 4 > ((size_t)64 << 20) ? live * 4 : ((size_t)64 << 20);
+}
+
+ARC_COLD static void arc_rc_collect(void) {
+    arc_gc_count++;
+    arc_hcache_s = NULL;
+    if (arc_heap_bytes >= arc_cycle_at || (arc_gc_stress && (arc_gc_count & 7) == 0)) arc_rc_cycle_collect();
+    else arc_rc_reconcile();
+    arc_alloc_bytes = 0;
+    if (arc_gc_verify) arc_heap_verify(0);
+}
+#endif
+
+/* registers a new object with the collector */
+static inline void arc_track(ArcObj *o, size_t size) {
+#if ARC_MM_RC
+    arc_heap_bytes += size;
+    o->flags |= ARC_F_ZCT;
+    arc_vec_push(&arc_zct, o);
+#else
+    (void)size;
+    arc_vec_push(&arc_young, o);
+#endif
+}
+
+ARC_COLD static void *arc_alloc_large(const ArcTD *td, size_t size) {
+    ArcLarge *l = (ArcLarge *)arc_xcalloc(sizeof(ArcLarge) + size);
+    l->next = arc_large.next;
+    l->prev = &arc_large;
+    arc_large.next->prev = l;
+    arc_large.next = l;
+    ArcObj *o = (ArcObj *)(l + 1);
+    o->flags = ARC_F_LARGE;
     o->td = td;
+    arc_alloc_bytes += size;
+    arc_track(o, size);
+    return o;
+}
+
+static uint64_t arc_pause_total_ns = 0, arc_pause_max_ns = 0;  /* ARC_GC_STATS */
+
+static inline uint64_t arc_now_ns(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+}
+
+ARC_COLD static void arc_collect(void) {
+    uint64_t t0 = arc_stats ? arc_now_ns() : 0;
+#if ARC_MM_RC
+    arc_rc_collect();
+#else
+    arc_gc_collect();
+#endif
+    if (arc_stats) {
+        uint64_t d = arc_now_ns() - t0;
+        arc_pause_total_ns += d;
+        if (d > arc_pause_max_ns) arc_pause_max_ns = d;
+    }
+}
+
+/* Allocates a zeroed object; the rare paths (collection, large objects, new
+ * pages) are out of line so the C compiler can inline this where it pays. */
+static inline void *arc_alloc(const ArcTD *td, size_t size) {
+#if ARC_MM_RC
+    if (ARC_UNLIKELY((arc_zct.n >= arc_zct_limit || arc_heap_bytes >= arc_cycle_at || arc_gc_stress) && !arc_gc_inhibit))
+        arc_collect();
+#else
+    if (ARC_UNLIKELY((arc_alloc_bytes >= arc_nursery || arc_gc_stress) && !arc_gc_inhibit)) arc_collect();
+#endif
+    if (ARC_UNLIKELY(size > ARC_SMALL_MAX)) return arc_alloc_large(td, size);
+    int cls = arc_size_class(size);
+    ArcObj *o = arc_small_alloc(cls, size);
+    o->flags = (uint32_t)cls << ARC_CLS_SHIFT;
+    o->td = td;
+    arc_alloc_bytes += arc_class_size[cls];
+    arc_track(o, size);
+    return o;
+}
+
+/* Roots the runtime's own locals (e.g. a result array being filled) so the
+ * collector may run while the function allocates. Pair with ARC_RT_POP. */
+#define ARC_RT_FRAME(n, ...) void **arc_rt_slots_[n] = {__VA_ARGS__}; \
+    ArcFrame arc_rt_fr_ = {arc_ftop, n, arc_rt_slots_}; arc_ftop = &arc_rt_fr_
+#define ARC_RT_POP() (arc_ftop = arc_rt_fr_.prev)
+
+/* store a reference into a container slot of a fresh or existing object */
+#define ARC_PUSH_REF(T, a, v) do { ArcArr *_a = (a); T _v = (v); if (ARC_UNLIKELY(_a->len == _a->cap)) arc_arr_grow(_a); \
+    arc_wb(_a, NULL, (void *)_v); ((T *)_a->data)[_a->len++] = _v; } while (0)
+#define ARC_PUSH_RES(T, a, v) do { ArcArr *_a = (a); T _v = (v); if (ARC_UNLIKELY(_a->len == _a->cap)) arc_arr_grow(_a); \
+    arc_wb(_a, NULL, (void *)_v.err); ((T *)_a->data)[_a->len++] = _v; } while (0)
+
+static void arc_gc_stats(void) {
+    size_t pages = 0, used = 0, large = 0, nlarge = 0;
+    fprintf(stderr, "arc heap (%s): %zu collections, %.1f ms in total, longest pause %.2f ms\n", ARC_MM_RC ? "arc" : "gc",
+            arc_gc_count, arc_pause_total_ns / 1e6, arc_pause_max_ns / 1e6);
+    for (int c = 0; c < ARC_NCLASS; c++) {
+        size_t np = 0, nu = 0, ns = 0;
+        for (ArcPage *p = arc_pages[c]; p; p = p->next) {
+            np++;
+            ns += p->nslots;
+            for (uint32_t i = 0; i < p->bump; i++) if (!(arc_page_slot(p, i)->flags & ARC_F_FREE)) nu++;
+        }
+        if (np) fprintf(stderr, "  class %3u: %6zu pages, %9zu / %9zu slots in use\n", arc_class_size[c], np, nu, ns);
+        pages += np;
+        used += nu * arc_class_size[c];
+    }
+    for (ArcLarge *l = arc_large.next; l != &arc_large; l = l->next) { large += arc_obj_bytes((ArcObj *)(l + 1)); nlarge++; }
+    fprintf(stderr, "  pages: %.1f MB, objects in them: %.1f MB; large objects: %zu, %.1f MB\n",
+            pages * (double)ARC_PAGE_SIZE / 1048576, used / 1048576.0, nlarge, large / 1048576.0);
+}
+
+/* Fixed-size objects made by generated code (structs, enum values, closures):
+ * the size is a compile-time constant, so the whole fast path folds down to a
+ * free-list pop or a bump allocation. */
+static inline __attribute__((always_inline)) void *arc_new_obj(const ArcTD *td, size_t size) {
+    if (size > ARC_SMALL_MAX) return arc_alloc(td, size);
+#if ARC_MM_RC
+    if (ARC_UNLIKELY((arc_zct.n >= arc_zct_limit || arc_heap_bytes >= arc_cycle_at || arc_gc_stress) && !arc_gc_inhibit))
+        arc_collect();
+#else
+    if (ARC_UNLIKELY((arc_alloc_bytes >= arc_nursery || arc_gc_stress) && !arc_gc_inhibit)) arc_collect();
+#endif
+    int cls = arc_size_class(size);
+    ArcObj *o = arc_small_alloc(cls, size);
+    o->flags = (uint32_t)cls << ARC_CLS_SHIFT;
+    o->td = td;
+    arc_alloc_bytes += arc_class_size[cls];
+    arc_track(o, size);
     return o;
 }
 
@@ -730,12 +1211,23 @@ static ArcStr *arc_str_slice(const ArcStr *s, int64_t a, int64_t b, ArcLoc loc) 
     return arc_str_new(s->data + a, b - a);
 }
 
+/* first occurrence of sep[0..n) in [p, end), or NULL */
+static const char *arc_memfind(const char *p, const char *end, const char *sep, int64_t n) {
+    if (n == 1) return (const char *)memchr(p, sep[0], (size_t)(end - p));
+    while (end - p >= n) {
+        const char *q = (const char *)memchr(p, sep[0], (size_t)(end - p - n + 1));
+        if (!q) return NULL;
+        if (memcmp(q + 1, sep + 1, (size_t)n - 1) == 0) return q;
+        p = q + 1;
+    }
+    return NULL;
+}
+
 static int64_t arc_str_find(const ArcStr *s, const ArcStr *sub) {
     if (sub->len == 0) return 0;
     if (sub->len > s->len) return -1;
-    for (int64_t i = 0; i + sub->len <= s->len; i++)
-        if (s->data[i] == sub->data[0] && memcmp(s->data + i, sub->data, (size_t)sub->len) == 0) return i;
-    return -1;
+    const char *q = arc_memfind(s->data, s->data + s->len, sub->data, sub->len);
+    return q ? q - s->data : -1;
 }
 static bool arc_str_contains(const ArcStr *s, const ArcStr *sub) { return arc_str_find(s, sub) >= 0; }
 static bool arc_str_starts_with(const ArcStr *s, const ArcStr *p) {
@@ -882,17 +1374,26 @@ static ArcOptFloat arc_parse_float(const ArcStr *s) {
 
 /* -------------------------------------------------------------- arrays -- */
 
-static ArcArr *arc_arr_new(const ArcTD *td, int64_t len, int64_t cap) {
-    if (cap < len) cap = len;
+/* allocates the object and its zeroed buffer (fields are set by arc_arr_new) */
+__attribute__((noinline)) static ArcArr *arc_arr_alloc(const ArcTD *td, int64_t len, int64_t cap, char **data) {
     if (ARC_UNLIKELY(len < 0)) arc_capacity_overflow();
     size_t bytes = arc_mul_size((size_t)cap, td->elem->size);
-    char *data = cap ? (char *)arc_xcalloc(bytes) : NULL;
+    *data = cap ? (char *)arc_xcalloc(bytes) : NULL;
     ArcArr *a = (ArcArr *)arc_alloc(td, sizeof(ArcArr));
+    arc_account(&a->h, bytes);
+    return a;
+}
+
+/* Always inlined and tiny, so the C compiler sees the new length and buffer
+ * at the call site and can drop bounds checks in loops over the array. */
+static inline __attribute__((always_inline)) ArcArr *arc_arr_new(const ArcTD *td, int64_t len, int64_t cap) {
+    if (cap < len) cap = len;
+    char *data;
+    ArcArr *a = arc_arr_alloc(td, len, cap, &data);
     a->esize = td->elem->size;
     a->len = len;
     a->cap = cap;
     a->data = data;
-    arc_alloc_bytes += bytes;
     return a;
 }
 
@@ -902,7 +1403,7 @@ static void arc_arr_reserve(ArcArr *a, int64_t need) {
     while (nc < need) nc = nc > INT64_MAX / 2 ? need : nc * 2;
     a->data = (char *)arc_xrealloc(a->data, arc_mul_size((size_t)nc, a->esize));
     memset(a->data + (size_t)a->cap * a->esize, 0, (size_t)(nc - a->cap) * a->esize);
-    arc_alloc_bytes += (size_t)(nc - a->cap) * a->esize;
+    arc_account(&a->h, (size_t)(nc - a->cap) * a->esize);
     a->cap = nc;
 }
 
@@ -919,9 +1420,28 @@ static inline int64_t arc_idx(const ArcArr *a, int64_t i, ArcLoc loc) {
     return i;
 }
 
+/* The popped element stays readable at the returned index; in ARC mode it
+ * loses the array's reference (it is not freed before the next allocation). */
 static inline int64_t arc_pop_idx(ArcArr *a, ArcLoc loc) {
     if (ARC_UNLIKELY(a->len == 0)) arc_panic_at(loc, "pop() called on an empty array");
-    return --a->len;
+    --a->len;
+#if ARC_MM_RC
+    if (arc_td_has_ptr(a->h.td->elem)) arc_rc_dec(*(void **)(a->data + (size_t)a->len * a->esize));
+#endif
+    return a->len;
+}
+
+/* ARC mode: every reference in elements [s, e) gains (+1) or loses (-1) a count */
+static void arc_arr_rc_range(const ArcArr *a, int64_t s, int64_t e, int delta) {
+#if ARC_MM_RC
+    if (!arc_td_has_ptr(a->h.td->elem)) return;
+    for (int64_t i = s; i < e; i++) {
+        void *p = *(void **)(a->data + (size_t)i * a->esize);
+        if (delta > 0) arc_rc_inc(p); else arc_rc_dec(p);
+    }
+#else
+    (void)a; (void)s; (void)e; (void)delta;
+#endif
 }
 
 static inline int64_t arc_last_idx(const ArcArr *a, ArcLoc loc) {
@@ -943,6 +1463,7 @@ static void arc_arr_remove_at(ArcArr *a, int64_t i, void *out, ArcLoc loc) {
     if (ARC_UNLIKELY((uint64_t)i >= (uint64_t)a->len))
         arc_panic_at(loc, "removal index (is %lld) should be < len (is %lld)", (long long)i, (long long)a->len);
     memcpy(out, a->data + (size_t)i * a->esize, a->esize);
+    arc_arr_rc_range(a, i, i + 1, -1);
     memmove(a->data + (size_t)i * a->esize, a->data + (size_t)(i + 1) * a->esize, (size_t)(a->len - i - 1) * a->esize);
     a->len--;
     memset(a->data + (size_t)a->len * a->esize, 0, a->esize);
@@ -952,10 +1473,12 @@ static ArcArr *arc_arr_slice(const ArcArr *a, int64_t s, int64_t e, ArcLoc loc) 
     arc_check_range(s, e, a->len, loc);
     ArcArr *r = arc_arr_new(a->h.td, e - s, e - s);
     if (e > s) memcpy(r->data, a->data + (size_t)s * a->esize, (size_t)(e - s) * a->esize);
+    arc_arr_rc_range(r, 0, r->len, +1);
     return r;
 }
 
 static void arc_arr_clear(ArcArr *a) {
+    arc_arr_rc_range(a, 0, a->len, -1);
     if (a->data) memset(a->data, 0, (size_t)a->len * a->esize);
     a->len = 0;
 }
@@ -1081,64 +1604,59 @@ static ArcStr *arc_arr_join(const ArcArr *a, const ArcStr *sep) {
 }
 
 static ArcArr *arc_str_split(const ArcStr *s, const ArcStr *sep) {
-    arc_gc_inhibit++;
     ArcArr *r = arc_arr_new(&arc_td_arr_str, 0, 4);
+    ARC_RT_FRAME(1, (void **)&r);
     if (sep->len == 0) {
         for (int64_t i = 0; i < s->len;) {
             int n = arc_utf8_len((unsigned char)s->data[i]);
             if (i + n > s->len) n = (int)(s->len - i);
             ArcStr *part = arc_str_new(s->data + i, n);
-            ARC_PUSH(ArcStr *, r, part);
+            ARC_PUSH_REF(ArcStr *, r, part);
             i += n;
         }
     } else {
-        int64_t start = 0;
-        for (int64_t i = 0; i + sep->len <= s->len;) {
-            if (memcmp(s->data + i, sep->data, (size_t)sep->len) == 0) {
-                ArcStr *part = arc_str_new(s->data + start, i - start);
-                ARC_PUSH(ArcStr *, r, part);
-                i += sep->len;
-                start = i;
-            } else {
-                i++;
-            }
+        const char *p = s->data, *end = s->data + s->len, *q;
+        while ((q = arc_memfind(p, end, sep->data, sep->len)) != NULL) {
+            ArcStr *part = arc_str_new(p, q - p);
+            ARC_PUSH_REF(ArcStr *, r, part);
+            p = q + sep->len;
         }
-        ArcStr *last = arc_str_new(s->data + start, s->len - start);
-        ARC_PUSH(ArcStr *, r, last);
+        ArcStr *last = arc_str_new(p, end - p);
+        ARC_PUSH_REF(ArcStr *, r, last);
     }
-    arc_gc_inhibit--;
+    ARC_RT_POP();
     return r;
 }
 
 static ArcArr *arc_str_chars(const ArcStr *s) {
-    ArcStr empty = {{0, &arc_td_str, ARC_F_STATIC, 0}, 0, ""};
+    ArcStr empty = {{&arc_td_str, ARC_F_STATIC, ARC_RC_STATIC}, 0, ""};
     return arc_str_split(s, &empty);
 }
 
 static ArcArr *arc_str_lines(const ArcStr *s) {
-    arc_gc_inhibit++;
     ArcArr *r = arc_arr_new(&arc_td_arr_str, 0, 4);
+    ARC_RT_FRAME(1, (void **)&r);
     int64_t start = 0;
     for (int64_t i = 0; i < s->len; i++) {
         if (s->data[i] == '\n') {
             int64_t end = i;
             if (end > start && s->data[end - 1] == '\r') end--;
             ArcStr *part = arc_str_new(s->data + start, end - start);
-            ARC_PUSH(ArcStr *, r, part);
+            ARC_PUSH_REF(ArcStr *, r, part);
             start = i + 1;
         }
     }
     if (start < s->len) {
         ArcStr *part = arc_str_new(s->data + start, s->len - start);
-        ARC_PUSH(ArcStr *, r, part);
+        ARC_PUSH_REF(ArcStr *, r, part);
     }
-    arc_gc_inhibit--;
+    ARC_RT_POP();
     return r;
 }
 
 static ArcArr *arc_str_split_ws(const ArcStr *s) {
-    arc_gc_inhibit++;
     ArcArr *r = arc_arr_new(&arc_td_arr_str, 0, 4);
+    ARC_RT_FRAME(1, (void **)&r);
     int64_t i = 0;
     while (i < s->len) {
         while (i < s->len && arc_is_space(s->data[i])) i++;
@@ -1146,10 +1664,10 @@ static ArcArr *arc_str_split_ws(const ArcStr *s) {
         while (i < s->len && !arc_is_space(s->data[i])) i++;
         if (i > st) {
             ArcStr *part = arc_str_new(s->data + st, i - st);
-            ARC_PUSH(ArcStr *, r, part);
+            ARC_PUSH_REF(ArcStr *, r, part);
         }
     }
-    arc_gc_inhibit--;
+    ARC_RT_POP();
     return r;
 }
 
@@ -1206,7 +1724,15 @@ static inline uint64_t arc_hash_scalar(uint64_t x) {
 
 static uint64_t arc_hash_key(const void *k, const ArcTD *td) {
     switch (td->kind) {
-    case ARC_K_STR: { const ArcStr *s = *(ArcStr *const *)k; return arc_hash_bytes(s->data, s->len); }
+    case ARC_K_STR: {
+        /* `m[k] = m.get_or(k, 0) + 1` hashes the same string twice in a row.
+         * Strings are immutable and the cache is cleared by every collection
+         * (the only time an address can be reused), so a hit is always valid. */
+        const ArcStr *s = *(ArcStr *const *)k;
+        if (s == arc_hcache_s) return arc_hcache_h;
+        arc_hcache_s = s;
+        return arc_hcache_h = arc_hash_bytes(s->data, s->len);
+    }
     case ARC_K_BOOL: return arc_hash_scalar(*(const bool *)k);
     case ARC_K_FLOAT: { double d = *(const double *)k; if (d == 0) d = 0; uint64_t u; memcpy(&u, &d, 8); return arc_hash_scalar(u); }
     default: return arc_hash_scalar(*(const uint64_t *)k);
@@ -1266,7 +1792,7 @@ static void arc_map_rebuild(ArcMap *m, int64_t need) {
     int64_t icap = 8;
     while (icap < need * 2) icap *= 2;
     if (icap != m->icap) {
-        arc_alloc_bytes += (size_t)icap * sizeof(int64_t);
+        arc_account(&m->h, (size_t)icap * sizeof(int64_t));
         free(m->idx);
         m->idx = (int64_t *)arc_xmalloc((size_t)icap * sizeof(int64_t));
         m->icap = icap;
@@ -1312,7 +1838,7 @@ static void *arc_map_slot(ArcMap *m, const void *key) {
         int64_t nc = m->capent ? m->capent * 2 : 8;
         m->ent = (char *)arc_xrealloc(m->ent, arc_mul_size((size_t)nc, m->esize));
         memset(m->ent + (size_t)m->capent * m->esize, 0, (size_t)(nc - m->capent) * m->esize);
-        arc_alloc_bytes += (size_t)(nc - m->capent) * m->esize;
+        arc_account(&m->h, (size_t)(nc - m->capent) * m->esize);
         m->capent = nc;
     }
     int64_t k = m->nent++;
@@ -1320,6 +1846,7 @@ static void *arc_map_slot(ArcMap *m, const void *key) {
     *(uint64_t *)ent = h;
     ent[8] = 1;
     memcpy(ent + m->koff, key, m->ksize);
+    if (m->h.td->key->is_heap) arc_wb(m, NULL, *(void *const *)key);
     memset(ent + m->voff, 0, m->vsize);
     m->idx[slot] = k;
     m->len++;
@@ -1331,6 +1858,8 @@ static bool arc_map_remove(ArcMap *m, const void *key) {
     int64_t e = arc_map_find(m, key, arc_hash_key(key, m->h.td->key), &slot);
     if (e < 0) return false;
     char *ent = arc_map_ent(m, e);
+    if (m->h.td->key->is_heap) ARC_DROP_REF(*(void **)(ent + m->koff));
+    if (arc_td_has_ptr(m->h.td->elem)) ARC_DROP_REF(*(void **)(ent + m->voff));
     ent[8] = 0;
     memset(ent + m->koff, 0, m->esize - m->koff);
     m->idx[slot] = -2;
@@ -1339,6 +1868,15 @@ static bool arc_map_remove(ArcMap *m, const void *key) {
 }
 
 static void arc_map_clear(ArcMap *m) {
+#if ARC_MM_RC
+    int kh = m->h.td->key->is_heap, vh = arc_td_has_ptr(m->h.td->elem);
+    for (int64_t i = 0; i < m->nent && (kh || vh); i++) {
+        char *e = arc_map_ent(m, i);
+        if (!e[8]) continue;
+        if (kh) arc_rc_dec(*(void **)(e + m->koff));
+        if (vh) arc_rc_dec(*(void **)(e + m->voff));
+    }
+#endif
     if (m->ent) memset(m->ent, 0, (size_t)m->nent * m->esize);
     m->nent = 0;
     m->len = 0;
@@ -1362,6 +1900,7 @@ static ArcArr *arc_map_keys(const ArcMap *m, const ArcTD *arrtd) {
         if (!e[8]) continue;
         memcpy(r->data + (size_t)w++ * r->esize, e + m->koff, m->ksize);
     }
+    arc_arr_rc_range(r, 0, r->len, +1);
     return r;
 }
 
@@ -1373,6 +1912,7 @@ static ArcArr *arc_map_values(const ArcMap *m, const ArcTD *arrtd) {
         if (!e[8]) continue;
         memcpy(r->data + (size_t)w++ * r->esize, e + m->voff, m->vsize);
     }
+    arc_arr_rc_range(r, 0, r->len, +1);
     return r;
 }
 
@@ -1554,6 +2094,7 @@ static inline int64_t arc_check_len(int64_t n, ArcLoc loc) {
 
 static ArcErr *arc_err_new(ArcStr *msg) {
     ArcErr *e = (ArcErr *)arc_alloc(&arc_td_err, sizeof(ArcErr));
+    ARC_INIT_REF(msg);
     e->msg = msg;
     return e;
 }
@@ -1583,14 +2124,14 @@ static int64_t arc_main_result(ArcErr *e) {
     return 1;
 }
 
-/* stable merge sort with a user comparator; collection is paused because
- * elements move through a scratch buffer the GC cannot see */
+/* Stable merge sort with a user comparator. The comparator may allocate, so
+ * the collector can run: every element stays in `a` (the scratch buffer only
+ * holds copies) until a pass is copied back, which adds no references. */
 static void arc_arr_sort_by(ArcArr *a, ArcClo *f, bool (*less)(ArcClo *, const void *, const void *)) {
     int64_t n = a->len;
     if (n < 2) return;
     size_t es = a->esize;
     char *tmp = (char *)arc_xmalloc(arc_mul_size((size_t)n, es));
-    arc_gc_inhibit++;
     for (int64_t width = 1; width < n; width *= 2) {
         for (int64_t lo = 0; lo < n; lo += 2 * width) {
             int64_t mid = lo + width < n ? lo + width : n;
@@ -1605,7 +2146,6 @@ static void arc_arr_sort_by(ArcArr *a, ArcClo *f, bool (*less)(ArcClo *, const v
         }
         memcpy(a->data, tmp, (size_t)n * es);
     }
-    arc_gc_inhibit--;
     free(tmp);
 }
 
@@ -1739,17 +2279,17 @@ static void *arc_list_dir(const ArcStr *path) {
     if (arc_has_nul(path)) return arc_err_fmt("invalid path", path, 0);
     DIR *d = opendir(path->data);
     if (!d) return arc_err_fmt("cannot list directory", path, errno);
-    arc_gc_inhibit++;
     ArcArr *r = arc_arr_new(&arc_td_arr_str, 0, 8);
+    ARC_RT_FRAME(1, (void **)&r);
     struct dirent *e;
     while ((e = readdir(d)) != NULL) {
         if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..")) continue;
         ArcStr *name = arc_str_new(e->d_name, (int64_t)strlen(e->d_name));
-        ARC_PUSH(ArcStr *, r, name);
+        ARC_PUSH_REF(ArcStr *, r, name);
     }
     closedir(d);
     arc_arr_sort(r);
-    arc_gc_inhibit--;
+    ARC_RT_POP();
     return r;
 }
 
@@ -1815,17 +2355,24 @@ static void arc_runtime_init(int argc, char **argv, const char *const *files) {
     if (getrlimit(RLIMIT_STACK, &rl) == 0 && rl.rlim_cur != RLIM_INFINITY) arc_stack_limit = (size_t)rl.rlim_cur;
     else arc_stack_limit = (size_t)8 << 20;
     arc_file_names = files;
-    arc_init_classes();
     arc_install_signals();
+#if !ARC_MM_RC
+    const char *ns = getenv("ARC_GC_NURSERY_MB");  /* tuning knob: nursery size */
+    if (ns && atoi(ns) > 0) arc_nursery = (size_t)atoi(ns) << 20;
+#endif
+    const char *gs = getenv("ARC_GC_STATS");
+    arc_stats = gs && *gs && *gs != '0';
     const char *st = getenv("ARC_GC_STRESS");
     arc_gc_stress = st && *st && *st != '0';
+    const char *vf = getenv("ARC_GC_VERIFY");
+    arc_gc_verify = arc_gc_stress || (vf && *vf && *vf != '0');
     arc_init_random();
     arc_add_groot((void **)&arc_args_arr);
     arc_args_arr = arc_arr_new(&arc_td_arr_str, 0, argc);
     arc_gc_inhibit++;
     for (int i = 0; i < argc; i++) {
         ArcStr *s = arc_str_new(argv[i], (int64_t)strlen(argv[i]));
-        ARC_PUSH(ArcStr *, arc_args_arr, s);
+        ARC_PUSH_REF(ArcStr *, arc_args_arr, s);
     }
     arc_gc_inhibit--;
 }

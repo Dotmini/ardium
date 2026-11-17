@@ -45,8 +45,10 @@ fn main() {
 - **Safe by default.** Bindings are immutable unless declared `let mut`. Arrays
   are bounds-checked, integer division by zero is caught, and unbounded
   recursion is reported as a stack overflow instead of a crash.
-- **Automatic memory.** A precise mark-and-sweep garbage collector with a
-  size-class allocator. There is no `malloc`/`free` in user code.
+- **Automatic memory, two ways.** Pick per build: a generational garbage
+  collector (`--mm=gc`, the default, highest throughput) or automatic reference
+  counting with a cycle collector (`--mm=arc`, lowest memory). Programs behave
+  identically in both. There is no `malloc`/`free` in user code.
 - **Helpful errors.** Rust-style diagnostics with source snippets, caret spans,
   and `help:` suggestions, including "did you mean" fixes for typos.
 - **Batteries included.** f-strings with format specs, string/array/map methods,
@@ -103,27 +105,41 @@ panic: index out of bounds: the len is 3 but the index is 5
   --> main.ar:4:13
 ```
 
-## Performance: Arc vs Rust vs Go
+## Performance
 
-Six workloads, each written idiomatically in all three languages (all in
-[`benchmarks/compare/`](benchmarks/compare/)). Every program prints the same
-output in all three languages. Times are the best of 3 runs on Apple Silicon
-(arm64, macOS); lower is better.
+Ten workloads, written with the same algorithm in Arc, Rust, Go, Java and
+Python (sources and harness in [`benchmarks/suite/`](benchmarks/suite/)). All
+five print byte-identical output. The full, formal comparison is
+[`benchmarks/suite/Arc_Benchmark_Report.pdf`](benchmarks/suite/Arc_Benchmark_Report.pdf).
 
-| Benchmark | Workload | Arc | Rust | Go |
-|---|---|---:|---:|---:|
-| fib | recursive calls, fib(40) | 0.287s | 0.293s | 0.328s |
-| sieve | array indexing, primes below 50M | 0.160s | 0.196s | 0.199s |
-| nbody | float math on structs, 5M steps | 0.202s | 0.209s | 0.217s |
-| binary_trees | allocation + GC, depth 18 | 1.196s | 1.480s | 1.114s |
-| wordcount | strings + hash map, 3M inserts | 0.208s | 0.255s | 0.177s |
-| sort | sort 5M ints | 0.110s | 0.098s | 0.390s |
+The table below covers both Arc memory modes. Each figure is the median wall
+time and peak memory of 9 runs on an Apple M2 (macOS 27). Runs were
+interleaved in shuffled order, so heat and background load hit every program
+equally. "Arc 1" is the compiler before the generational GC and ARC work.
 
-Reproduce the results with `make bench` (needs `rustc` and `go`).
+| Workload | Arc 1 | Arc `--mm=gc` | Arc `--mm=arc` | Rust | Go |
+|---|---:|---:|---:|---:|---:|
+| fib(38) | 0.118s | 0.117s | 0.119s | 0.122s | 0.140s |
+| sieve, 50M | 0.189s | 0.175s | 0.167s | 0.227s | 0.218s |
+| nbody, 5M steps | 0.216s | 0.218s | 0.216s | 0.223s | 0.234s |
+| binary_trees(18) | 1.410s / 98 MB | **0.680s** / 76 MB | 0.989s / **34 MB** | 1.500s / 18 MB | 1.193s / 39 MB |
+| wordcount, 3M | 0.251s / 16 MB | 0.191s / 17 MB | 0.195s / **8 MB** | 0.279s / 7 MB | 0.192s / 11 MB |
+| sort, 5M ints | 0.076s | 0.076s | 0.072s | 0.102s | 0.415s |
+| matmul 400×400 | 0.039s | 0.037s | 0.037s | 0.040s | 0.034s |
+| mandelbrot 2000² | 0.235s | 0.231s | 0.227s | 0.234s | 0.238s |
+| fannkuch(10) | 0.180s | 0.180s | 0.178s | 0.163s | 0.173s |
+| text, 1M CSV lines | 0.384s / 424 MB | 0.280s / 198 MB | 0.272s / 189 MB | 0.253s / 93 MB | 0.230s / 106 MB |
 
-Memory and latency are where a garbage-collected Arc still trails:
-- **Peak memory:** binary_trees peaks at 86 MB, against 18 MB for Rust and 35 MB for Go.
-- **GC pauses:** the collector is stop-the-world, so pauses grow with heap size. They are about 17 ms at a 60 MB heap, while Go's concurrent GC stays under 1 ms.
+Run it yourself with `python3 benchmarks/suite/compare_mm.py` after a full
+`run_suite.py` run. Things to know:
+- **Sort:** Arc's standard sort is a radix sort for numbers, while the other
+  languages use comparison sorts. That explains most of the gap.
+- **Memory:** Arc still uses more memory than Rust wherever it allocates many
+  objects. Every Arc string and object is a separate heap allocation, while
+  Rust stores them inline.
+- **GC pauses:** the collector is stop-the-world. With the generational
+  collector, the longest pause is 7.5 ms on binary_trees and 8.3 ms on text
+  (`ARC_GC_STATS=1` prints them). Go's concurrent GC stays under 1 ms.
 - **Hashing:** maps use a keyed SipHash, as Rust does, to resist hash flooding.
 
 ## Testing
@@ -133,8 +149,11 @@ make test                   # language test suite (tests/run_lang_tests.sh)
 ```
 
 The suite has four parts:
-- **Golden-output programs** (`tests/lang/run/`). Each is also re-run with
-  `ARC_GC_STRESS=1`, which collects garbage on every allocation.
+- **Golden-output programs** (`tests/lang/run/`). Each is built in both memory
+  modes. Each mode also runs it with `ARC_GC_STRESS=1`, which collects garbage
+  on every allocation and verifies the heap after each collection: no reference
+  to a freed object, every write barrier present (GC), and every reference count
+  exact (ARC).
 - **Compile-error programs** (`tests/lang/errors/`). Each must fail with the
   expected messages.
 - **Panic programs** (`tests/lang/panics/`). Each must panic with the expected
@@ -150,9 +169,9 @@ src/
 │   ├── lexer.cpp         tokens, string/f-string literals
 │   ├── parser.cpp        recursive-descent parser → AST
 │   ├── checker.cpp       name resolution, type inference/checking, mutability, diagnostics
-│   ├── cgen.cpp          lowering to C (every value lives in a GC-visible temp)
+│   ├── cgen.cpp          lowering to C (GC-visible temps, write barriers, frame elision)
 │   └── driver.cpp        imports, caching, invoking the C compiler
-└── runtime/arc_rt.c      GC, strings, arrays, maps, formatting, panics (embedded in arc)
+└── runtime/arc_rt.c      generational GC / ARC, strings, arrays, maps, formatting, panics (embedded in arc)
 ```
 
 Pipeline: source → lexer → parser → type checker → C code generation → `cc -O2/-O3`
@@ -168,7 +187,7 @@ Implemented: everything in the language reference. Planned next:
 - networking (TCP/HTTP)
 - C FFI
 - an LSP server for editors
-- an incremental GC
+- a concurrent GC (pauses are under 10 ms today)
 - porting the Cocoa/Metal UI bindings from the previous toolchain
 
 The earlier prototype toolchains are kept for reference: the OCaml/LLVM compiler

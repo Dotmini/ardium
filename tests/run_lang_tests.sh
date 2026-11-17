@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Arc language test suite.
-#   tests/lang/run/*.ar     programs whose stdout must equal the matching .out file
-#                           (each is also run with ARC_GC_STRESS=1, which collects
-#                           garbage on every allocation to catch rooting bugs)
+#   tests/lang/run/*.ar     programs whose stdout must equal the matching .out file,
+#                           built with both memory modes (--mm=gc and --mm=arc), each
+#                           also run with ARC_GC_STRESS=1: collect on every allocation
+#                           and verify the heap (write barriers, exact reference counts)
 #   tests/lang/errors/*.ar  must fail to compile; every `// ERROR: text` line must
 #                           appear in the diagnostics
 #   tests/lang/panics/*.ar  must exit with code 101 (or `// EXIT: n`); every
@@ -22,14 +23,16 @@ bad() { fail=$((fail + 1)); failures+=("$1"); echo "FAIL: $1"; [ -n "${2:-}" ] &
 
 for f in tests/lang/run/*.ar; do
     expected="${f%.ar}.out"
-    actual=$($ARC run -q "$f" 2>&1)
-    if [ "$actual" == "$(cat "$expected")" ]; then ok; else
-        bad "$f" "$(diff <(echo "$actual") "$expected")"
-    fi
-    stress=$(ARC_GC_STRESS=1 $ARC run -q "$f" 2>&1)
-    if [ "$stress" == "$(cat "$expected")" ]; then ok; else
-        bad "$f (GC stress)" "$(diff <(echo "$stress") "$expected")"
-    fi
+    for mm in gc arc; do
+        actual=$($ARC run -q --mm=$mm "$f" 2>&1)
+        if [ "$actual" == "$(cat "$expected")" ]; then ok; else
+            bad "$f (--mm=$mm)" "$(diff <(echo "$actual") "$expected")"
+        fi
+        stress=$(ARC_GC_STRESS=1 $ARC run -q --mm=$mm "$f" 2>&1)
+        if [ "$stress" == "$(cat "$expected")" ]; then ok; else
+            bad "$f (--mm=$mm, stress)" "$(diff <(echo "$stress") "$expected")"
+        fi
+    done
 done
 
 for f in tests/lang/errors/*.ar; do
