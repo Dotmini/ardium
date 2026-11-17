@@ -71,7 +71,7 @@ if [ "$out" == "42" ]; then ok; else bad "imports" "$out"; fi
 rm -rf "$tmp"
 
 # example programs must compile and run cleanly
-for f in examples/complex_logic.ar examples/server.ar examples/wordfreq.ar examples/inventory.ar; do
+for f in examples/complex_logic.ar examples/server.ar examples/wordfreq.ar examples/inventory.ar examples/calculator.ar; do
     out=$($ARC run -q "$f" 2>&1)
     if [ $? -eq 0 ]; then ok; else bad "$f" "$out"; fi
 done
