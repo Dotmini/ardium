@@ -17,8 +17,10 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
-BIN = os.path.join(HERE, "bin")
-ARC = os.path.join(ROOT, "arc")
+# Where binaries go (ARC_BENCH_BIN) and which compiler to use (ARC) can be overridden,
+# e.g. to keep every build product on an external drive.
+BIN = os.environ.get("ARC_BENCH_BIN", os.path.join(HERE, "bin"))
+ARC = os.environ.get("ARC", os.path.join(ROOT, "arc"))
 RUNS = int(os.environ.get("RUNS", "3"))
 
 BENCHES = [

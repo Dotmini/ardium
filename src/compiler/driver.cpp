@@ -42,8 +42,9 @@ const std::string& runtimeSource() {
 std::string cacheDir() {
     auto absolute = [](const char* p) { return p && p[0] == '/'; };
     std::string base;
-    if (const char* x = std::getenv("ARC_CACHE_DIR"); absolute(x)) base = x;
-    else if (const char* x = std::getenv("XDG_CACHE_HOME"); absolute(x)) base = std::string(x) + "/arc";
+    bool chosen = false;  // explicitly configured: never create its parent directories
+    if (const char* x = std::getenv("ARC_CACHE_DIR"); absolute(x)) { base = x; chosen = true; }
+    else if (const char* x = std::getenv("XDG_CACHE_HOME"); absolute(x)) { base = std::string(x) + "/arc"; chosen = true; }
     else if (const char* h = std::getenv("HOME"); absolute(h)) base = std::string(h) + "/.cache/arc";
     else if (struct passwd* pw = getpwuid(getuid()); pw && absolute(pw->pw_dir)) base = std::string(pw->pw_dir) + "/.cache/arc";
     else {
@@ -52,7 +53,15 @@ std::string cacheDir() {
     }
     std::error_code ec;
     if (!fs::exists(base, ec)) {
-        fs::create_directories(fs::path(base).parent_path(), ec);
+        fs::path parent = fs::path(base).parent_path();
+        if (chosen && !fs::is_directory(parent, ec)) {
+            // e.g. a cache on an external drive that is not connected: don't
+            // silently create the path on the internal disk instead
+            std::cerr << "error: cache directory " << base << " is unavailable (" << parent.string()
+                      << " does not exist; is the drive connected?)\n";
+            return "";
+        }
+        if (!chosen) fs::create_directories(parent, ec);
         if (mkdir(base.c_str(), 0700) != 0 && errno != EEXIST) {
             std::cerr << "error: cannot create cache directory " << base << "\n";
             return "";
@@ -60,7 +69,14 @@ std::string cacheDir() {
     }
     struct stat st;
     if (stat(base.c_str(), &st) != 0 || !S_ISDIR(st.st_mode)) {
-        std::cerr << "error: cache path " << base << " is not a directory\n";
+        struct stat lst;
+        if (lstat(base.c_str(), &lst) == 0 && S_ISLNK(lst.st_mode)) {
+            std::error_code e2;
+            std::cerr << "error: cache directory " << base << " links to " << fs::read_symlink(base, e2).string()
+                      << ", which is unavailable (is the drive connected?)\n";
+        } else {
+            std::cerr << "error: cache path " << base << " is not a directory\n";
+        }
         return "";
     }
     if (st.st_uid != getuid() || (st.st_mode & 022)) {
@@ -271,7 +287,9 @@ static BuildResult buildProgramImpl(const std::string& path, const BuildOptions&
     }
     std::string tmpBin = makeTemp(dir, hex, ".bin", nullptr);
     std::string errFile = makeTemp(dir, hex, ".err", nullptr);
-    std::string cmd = cc + " " + flags + " -o " + shellQuote(tmpBin) + " " + shellQuote(cfile) + " -lm 2> " + shellQuote(errFile);
+    // the C compiler's own temporary files go to the cache directory too
+    std::string cmd = "TMPDIR=" + shellQuote(dir) + " " + cc + " " + flags + " -o " + shellQuote(tmpBin) + " " + shellQuote(cfile) +
+                      " -lm 2> " + shellQuote(errFile);
     int st = std::system(cmd.c_str());
     if (st != 0) {
         std::string err;
