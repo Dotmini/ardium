@@ -102,14 +102,19 @@ output in all three languages. Times are the best of 3 runs on Apple Silicon
 
 | Benchmark | Workload | Arc | Rust | Go |
 |---|---|---:|---:|---:|
-| fib | recursive calls, fib(40) | 0.281s | 0.289s | 0.323s |
-| sieve | array indexing, primes below 50M | 0.168s | 0.181s | 0.184s |
-| nbody | float math on structs, 5M steps | 0.197s | 0.206s | 0.215s |
-| binary_trees | allocation + GC, depth 18 | 1.220s | 1.431s | 1.075s |
-| wordcount | strings + hash map, 3M inserts | 0.164s | 0.243s | 0.169s |
-| sort | sort 5M ints | 0.106s | 0.093s | 0.375s |
+| fib | recursive calls, fib(40) | 0.287s | 0.293s | 0.328s |
+| sieve | array indexing, primes below 50M | 0.160s | 0.196s | 0.199s |
+| nbody | float math on structs, 5M steps | 0.202s | 0.209s | 0.217s |
+| binary_trees | allocation + GC, depth 18 | 1.196s | 1.480s | 1.114s |
+| wordcount | strings + hash map, 3M inserts | 0.208s | 0.255s | 0.177s |
+| sort | sort 5M ints | 0.110s | 0.098s | 0.390s |
 
 Reproduce the results with `make bench` (needs `rustc` and `go`).
+
+Memory and latency are where a garbage-collected Arc still trails:
+- **Peak memory:** binary_trees peaks at 86 MB, against 18 MB for Rust and 35 MB for Go.
+- **GC pauses:** the collector is stop-the-world, so pauses grow with heap size. They are about 17 ms at a 60 MB heap, while Go's concurrent GC stays under 1 ms.
+- **Hashing:** maps use a keyed SipHash, as Rust does, to resist hash flooding.
 
 ## Testing
 

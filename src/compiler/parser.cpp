@@ -63,6 +63,16 @@ Loc Parser::span(const Loc& a, const Loc& b) const {
     return r;
 }
 
+// Nesting limit: keeps pathological input from overflowing the compiler's stack.
+static const int kMaxNesting = 1000;
+static const uint32_t kMaxChain = 20000;
+
+void Parser::enter(const Loc& at) {
+    if (++depth_ > kMaxNesting)
+        fail(at, "code is nested too deeply (more than " + std::to_string(kMaxNesting) + " levels)", "",
+             "split the expression or block into smaller functions");
+}
+
 void Parser::endStmt() {
     if (acceptP(";")) { while (acceptP(";")) {} return; }
     if (isP("}") || cur().kind == Tok::Eof || cur().nl) return;
@@ -269,6 +279,7 @@ TypeExpr* Parser::parseType() {
 
 Node* Parser::parseBlock() {
     acceptP(":");
+    enter(cur().loc);
     Token lb = expectP("{", "to start a block");
     Node* b = new Node(NK::Block, lb.loc);
     int savedNest = nest_;
@@ -283,6 +294,7 @@ Node* Parser::parseBlock() {
     next();
     nest_ = savedNest;
     noStruct_ = savedNoStruct;
+    leave();
     return b;
 }
 
@@ -448,6 +460,10 @@ Node* Parser::parseFor() {
 
 Node* Parser::binary(const std::string& op, Node* l, Node* r) {
     Node* n = new Node(NK::Binary, span(l->loc, r->loc));
+    n->depth = std::max(l->depth, r->depth) + 1;
+    if (n->depth > kMaxChain)
+        fail(n->loc, "expression is too long (more than " + std::to_string(kMaxChain) + " operators)", "",
+             "split it into several statements");
     n->str = op;
     n->kids = {l, r};
     return n;
@@ -553,6 +569,13 @@ Node* Parser::parseCast() {
 }
 
 Node* Parser::parseUnary() {
+    enter(cur().loc);
+    Node* r = parseUnaryInner();
+    leave();
+    return r;
+}
+
+Node* Parser::parseUnaryInner() {
     if (isP("-") || isP("!") || isP("~") || (cur().kind == Tok::Ident && cur().text == "not")) {
         Token op = next();
         Node* operand = parseUnary();

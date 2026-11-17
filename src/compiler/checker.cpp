@@ -87,6 +87,7 @@ bool Checker::run(bool testMode) {
     }
     for (FnDecl* fn : prog_.fns) checkFn(fn);
     for (FnDecl* fn : prog_.methods) checkFn(fn);
+    if (!diag_.hasErrors()) orderGlobals();
 
     if (!testMode) {
         auto it = prog_.fnByName.find("main");
@@ -243,6 +244,8 @@ void Checker::checkFn(FnDecl* fn) {
     if (!fn->ret && !hasValueReturn(fn->body)) fn->ret = T.voidT;
     // save context (may be invoked on demand from another function)
     FnDecl* savedFn = fn_;
+    Node* savedGlobal = curGlobal_;
+    curGlobal_ = nullptr;
     auto savedScopes = std::move(scopes_);
     auto savedScopeVars = std::move(scopeVars_);
     int savedLoop = loopDepth_;
@@ -271,10 +274,76 @@ void Checker::checkFn(FnDecl* fn) {
     }
 
     fn_ = savedFn;
+    curGlobal_ = savedGlobal;
     scopes_ = std::move(savedScopes);
     scopeVars_ = std::move(savedScopeVars);
     loopDepth_ = savedLoop;
     fn->state = 2;
+}
+
+// ------------------------------------------------------ global init order --
+// A global's initializer may call functions that read other globals. Record
+// those edges while checking, then initialize globals in dependency order so a
+// global is never read before it has a value (and reject real cycles).
+
+void Checker::noteGlobalUse(Var* v) {
+    if (fn_) fnGlobals_[fn_].insert(v);
+    else if (curGlobal_) globalDeps_[curGlobal_].insert(v);
+}
+
+void Checker::noteCall(FnDecl* callee) {
+    if (fn_) fnCalls_[fn_].insert(callee);
+    else if (curGlobal_) globalCalls_[curGlobal_].insert(callee);
+}
+
+void Checker::orderGlobals() {
+    std::map<Var*, Node*> letOf;
+    for (Node* g : prog_.globals) if (g->var) letOf[g->var] = g;
+    // globals an initializer needs: direct reads + reads of every function it can reach
+    auto needs = [&](Node* g) {
+        std::set<Var*> out(globalDeps_[g].begin(), globalDeps_[g].end());
+        std::set<FnDecl*> seen;
+        std::vector<FnDecl*> work(globalCalls_[g].begin(), globalCalls_[g].end());
+        while (!work.empty()) {
+            FnDecl* f = work.back();
+            work.pop_back();
+            if (!seen.insert(f).second) continue;
+            for (Var* v : fnGlobals_[f]) out.insert(v);
+            for (FnDecl* c : fnCalls_[f]) work.push_back(c);
+        }
+        return out;
+    };
+    std::map<Node*, int> state;  // 0 new, 1 visiting, 2 done
+    std::vector<Node*> order;
+    std::vector<Node*> path;
+    bool cycle = false;
+    std::function<void(Node*)> visit = [&](Node* g) {
+        if (cycle || state[g] == 2) return;
+        if (state[g] == 1) {
+            std::string chain;
+            bool on = false;
+            for (Node* p : path) {
+                if (p == g) on = true;
+                if (on) chain += "`" + p->str + "` -> ";
+            }
+            Diag& d = err(g->loc, "cycle in global initialization: " + chain + "`" + g->str + "`",
+                          "needs its own value to be initialized");
+            d.notes.push_back("help: globals are initialized before `main`; compute one of these inside a function instead");
+            cycle = true;
+            return;
+        }
+        state[g] = 1;
+        path.push_back(g);
+        for (Var* v : needs(g)) {
+            auto it = letOf.find(v);
+            if (it != letOf.end()) visit(it->second);
+        }
+        path.pop_back();
+        state[g] = 2;
+        order.push_back(g);
+    };
+    for (Node* g : prog_.globals) if (g->var) visit(g);
+    if (!cycle) prog_.globalInitOrder = order;
 }
 
 // ----------------------------------------------------------------- scopes --
@@ -328,6 +397,8 @@ Var* Checker::lookup(const std::string& name) {
         }
         if (let->var) return let->var;
         let->isConst = true;
+        Node* savedGlobal = curGlobal_;
+        curGlobal_ = let;
         FnDecl* savedFn = fn_;
         auto savedScopes = std::move(scopes_);
         auto savedScopeVars = std::move(scopeVars_);
@@ -347,6 +418,7 @@ Var* Checker::lookup(const std::string& name) {
             t = T.errorT;
         }
         fn_ = savedFn;
+        curGlobal_ = savedGlobal;
         scopes_ = std::move(savedScopes);
         scopeVars_ = std::move(savedScopeVars);
         loopDepth_ = savedLoop;
@@ -657,11 +729,20 @@ void Checker::checkFormatSpec(const std::string& spec, Type* t, const Loc& loc) 
     auto isAlign = [](char c) { return c == '<' || c == '>' || c == '^'; };
     if (spec.size() >= 2 && isAlign(spec[1])) i = 2;
     else if (isAlign(spec[0])) i = 1;
+    size_t w0 = i;
     while (i < spec.size() && std::isdigit((unsigned char)spec[i])) i++;
+    if (i - w0 > 5 || (i > w0 && std::stol(spec.substr(w0, i - w0)) > 10000)) {
+        err(loc, "format width in `:" + spec + "` is too large", "at most 10000");
+        return;
+    }
     if (i < spec.size() && spec[i] == '.') {
         size_t s = ++i;
         while (i < spec.size() && std::isdigit((unsigned char)spec[i])) i++;
         if (i == s) { err(loc, "invalid format spec `:" + spec + "`", "missing precision digits"); return; }
+        if (i - s > 4 || std::stol(spec.substr(s, i - s)) > 1000) {
+            err(loc, "format precision in `:" + spec + "` is too large", "at most 1000");
+            return;
+        }
         if (t->kind != TK::Float && !t->isError()) {
             err(loc, "precision `." + spec.substr(s, i - s) + "` only applies to `float` values, found `" + t->str() + "`");
             return;
@@ -711,6 +792,7 @@ Type* Checker::expr(Node* n, Type* expected) {
         }
         v->used = true;
         n->var = v;
+        if (v->isGlobal) noteGlobalUse(v);
         t = v->type;
         break;
     }
@@ -1085,6 +1167,7 @@ Type* Checker::call(Node* n) {
     if (it != prog_.fnByName.end()) {
         FnDecl* fn = it->second;
         n->fn = fn;
+        noteCall(fn);
         checkArgs(n, 0, fn, 0);
         return ensureReturnType(fn, n->loc);
     }
@@ -1128,6 +1211,7 @@ Type* Checker::pathCall(Node* n) {
     }
     FnDecl* fn = mit->second;
     n->fn = fn;
+    noteCall(fn);
     if (fn->hasSelf) {
         // Type::method(receiver, args...)
         if (n->kids.empty()) {
@@ -1170,6 +1254,7 @@ Type* Checker::methodCall(Node* n) {
         }
         FnDecl* fn = it->second;
         n->fn = fn;
+        noteCall(fn);
         if (!fn->hasSelf) {
             Diag& d = err(n->loc, "`" + fn->displayName() + "` is an associated function, not a method");
             d.notes.push_back("help: call it as `" + sd->name + "::" + fn->name + "(...)`");

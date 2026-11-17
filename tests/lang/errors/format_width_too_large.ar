@@ -1,0 +1,3 @@
+// ERROR: format width in `:99999999999999999999` is too large
+fn main() { let x = 1
+ println(f"{x:99999999999999999999}") }

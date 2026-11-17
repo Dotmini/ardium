@@ -5,11 +5,11 @@ Best of 3 runs, wall-clock seconds (lower is better). Arc: `arc build` (C backen
 
 | Benchmark | Workload | Arc | Rust | Go | Arc vs Rust | Arc vs Go | Same output |
 |---|---|---:|---:|---:|---:|---:|:---:|
-| fib | recursive calls, fib(40) | 0.281 | 0.289 | 0.323 | 0.97× | 0.87× | ✓ |
-| sieve | array indexing, primes below 50M | 0.168 | 0.181 | 0.184 | 0.93× | 0.91× | ✓ |
-| nbody | float math on structs, 5M steps | 0.197 | 0.206 | 0.215 | 0.96× | 0.92× | ✓ |
-| binary_trees | allocation + GC, depth 18 | 1.220 | 1.431 | 1.075 | 0.85× | 1.13× | ✓ |
-| wordcount | strings + hash map, 3M inserts | 0.164 | 0.243 | 0.169 | 0.67× | 0.97× | ✓ |
-| sort | sort 5M ints | 0.106 | 0.093 | 0.375 | 1.14× | 0.28× | ✓ |
+| fib | recursive calls, fib(40) | 0.287 | 0.293 | 0.328 | 0.98× | 0.87× | ✓ |
+| sieve | array indexing, primes below 50M | 0.160 | 0.196 | 0.199 | 0.82× | 0.80× | ✓ |
+| nbody | float math on structs, 5M steps | 0.202 | 0.209 | 0.217 | 0.97× | 0.93× | ✓ |
+| binary_trees | allocation + GC, depth 18 | 1.196 | 1.480 | 1.114 | 0.81× | 1.07× | ✓ |
+| wordcount | strings + hash map, 3M inserts | 0.208 | 0.255 | 0.177 | 0.82× | 1.17× | ✓ |
+| sort | sort 5M ints | 0.110 | 0.098 | 0.390 | 1.13× | 0.28× | ✓ |
 
 Ratios are Arc time ÷ other time: below 1.00× means Arc was faster.

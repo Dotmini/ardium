@@ -11,6 +11,7 @@
 set -u
 cd "$(dirname "$0")/.."
 ARC=${ARC:-./arc}
+case "$ARC" in */*) ARC="$(cd "$(dirname "$ARC")" && pwd)/$(basename "$ARC")" ;; esac
 export NO_COLOR=1
 pass=0
 fail=0
@@ -68,6 +69,17 @@ printf 'fn triple(x: int) -> int { return x * 3 }\n' > "$tmp/util.ar"
 printf 'import "util"\nfn main() { println(triple(14)) }\n' > "$tmp/main.ar"
 out=$($ARC run -q "$tmp/main.ar" 2>&1)
 if [ "$out" == "42" ]; then ok; else bad "imports" "$out"; fi
+rm -rf "$tmp"
+
+# toolchain hardening
+tmp=$(mktemp -d)
+out=$(cd "$tmp" && "$ARC" new 'bad"name' 2>&1)
+if [ $? -ne 0 ] && [[ "$out" == *"invalid project name"* ]] && [ -z "$(ls -A "$tmp")" ]; then ok; else bad "arc new rejects unsafe names" "$out"; fi
+mkdir -m 777 "$tmp/open_cache"
+chmod 777 "$tmp/open_cache"
+printf 'fn main() { println("x") }\n' > "$tmp/p.ar"
+out=$(ARC_CACHE_DIR="$tmp/open_cache" $ARC run -q "$tmp/p.ar" 2>&1)
+if [ $? -ne 0 ] && [[ "$out" == *"refusing to use cache directory"* ]]; then ok; else bad "world-writable cache dir is refused" "$out"; fi
 rm -rf "$tmp"
 
 # example programs must compile and run cleanly

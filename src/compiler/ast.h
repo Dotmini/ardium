@@ -157,6 +157,7 @@ struct Node {
     FnDecl* fn = nullptr;
     BI builtin = BI::None;
     bool isConst = false;
+    uint32_t depth = 0;              // height of a binary-operator chain (parser limit)
 
     Node(NK k, Loc l) : kind(k), loc(l) {}
 };

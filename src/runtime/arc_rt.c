@@ -164,6 +164,15 @@ ARC_COLD ARC_NORET static void arc_oom(void) {
     exit(134);
 }
 
+ARC_COLD ARC_NORET static void arc_capacity_overflow(void) {
+    arc_panic_at((ArcLoc){0, 0, 0}, "capacity overflow: the requested size does not fit in memory");
+}
+/* a * b for allocation sizes; panics instead of silently wrapping */
+static inline size_t arc_mul_size(size_t a, size_t b) {
+    size_t r;
+    if (ARC_UNLIKELY(__builtin_mul_overflow(a, b, &r))) arc_capacity_overflow();
+    return r;
+}
 static void *arc_xmalloc(size_t n) { void *p = malloc(n ? n : 1); if (!p) arc_oom(); return p; }
 static void *arc_xcalloc(size_t n) { void *p = calloc(1, n ? n : 1); if (!p) arc_oom(); return p; }
 static void *arc_xrealloc(void *p, size_t n) { void *q = realloc(p, n ? n : 1); if (!q) arc_oom(); return q; }
@@ -459,11 +468,11 @@ static void arc_buf_float(ArcBuf *b, double v) {
 }
 
 static void arc_buf_float_prec(ArcBuf *b, double v, int prec) {
-    char tmp[512];
-    int n = snprintf(tmp, sizeof tmp, "%.*f", prec, v);
-    if (n < 0) n = 0;
-    if ((size_t)n >= sizeof tmp) n = (int)sizeof tmp - 1;
-    arc_buf_put(b, tmp, (size_t)n);
+    int n = snprintf(NULL, 0, "%.*f", prec, v);
+    if (n <= 0) return;
+    arc_buf_reserve(b, (size_t)n + 1);
+    snprintf(b->p + b->len, (size_t)n + 1, "%.*f", prec, v);
+    b->len += (size_t)n;
 }
 
 static void arc_buf_bool(ArcBuf *b, bool v) { arc_buf_cstr(b, v ? "true" : "false"); }
@@ -513,6 +522,16 @@ static void arc_buf_align(ArcBuf *b, size_t start, int64_t width, char align, ch
 
 static void arc_fmt_value(ArcBuf *b, const void *p, const ArcTD *td, int quoted, int depth);
 
+static const void *arc_fmt_path[32];
+
+/* true if `o` is already being printed further up (a reference cycle) */
+static int arc_fmt_enter(ArcBuf *b, const void *o, int depth) {
+    for (int i = 0; i < depth && i < 32; i++)
+        if (arc_fmt_path[i] == o) { arc_buf_cstr(b, "<cycle>"); return 0; }
+    if (depth < 32) arc_fmt_path[depth] = o;
+    return 1;
+}
+
 static void arc_fmt_value(ArcBuf *b, const void *p, const ArcTD *td, int quoted, int depth) {
     if (depth > 24) { arc_buf_cstr(b, "..."); return; }
     switch (td->kind) {
@@ -536,6 +555,7 @@ static void arc_fmt_value(ArcBuf *b, const void *p, const ArcTD *td, int quoted,
     }
     case ARC_K_ARR: {
         const ArcArr *a = *(ArcArr *const *)p;
+        if (!arc_fmt_enter(b, a, depth)) return;
         arc_buf_putc(b, '[');
         for (int64_t i = 0; i < a->len; i++) {
             if (i) arc_buf_put(b, ", ", 2);
@@ -546,6 +566,7 @@ static void arc_fmt_value(ArcBuf *b, const void *p, const ArcTD *td, int quoted,
     }
     case ARC_K_MAP: {
         const ArcMap *m = *(ArcMap *const *)p;
+        if (!arc_fmt_enter(b, m, depth)) return;
         arc_buf_putc(b, '[');
         if (m->len == 0) arc_buf_putc(b, ':');
         int first = 1;
@@ -563,6 +584,7 @@ static void arc_fmt_value(ArcBuf *b, const void *p, const ArcTD *td, int quoted,
     }
     case ARC_K_STRUCT: {
         const char *o = *(const char *const *)p;
+        if (!arc_fmt_enter(b, o, depth)) return;
         arc_buf_cstr(b, td->name);
         if (!td->nfields) { arc_buf_cstr(b, " {}"); return; }
         arc_buf_cstr(b, " { ");
@@ -581,6 +603,7 @@ static void arc_fmt_value(ArcBuf *b, const void *p, const ArcTD *td, int quoted,
 /* ------------------------------------------------------------- strings -- */
 
 static ArcStr *arc_str_alloc(int64_t len) {
+    if (ARC_UNLIKELY(len < 0 || (uint64_t)len > ((uint64_t)1 << 48))) arc_capacity_overflow();
     ArcStr *s = (ArcStr *)arc_alloc(&arc_td_str, sizeof(ArcStr) + (size_t)len + 1);
     s->len = len;
     s->data = (const char *)(s + 1);
@@ -694,6 +717,8 @@ static ArcStr *arc_str_replace(const ArcStr *s, const ArcStr *from, const ArcStr
 
 static ArcStr *arc_str_repeat(const ArcStr *s, int64_t n, ArcLoc loc) {
     if (n < 0) arc_panic_at(loc, "repeat count must be non-negative, got %lld", (long long)n);
+    if (n > 0 && s->len > INT64_MAX / n)
+        arc_panic_at(loc, "repeat result too large: %lld bytes x %lld", (long long)s->len, (long long)n);
     ArcStr *r = arc_str_alloc(s->len * n);
     for (int64_t i = 0; i < n; i++) memcpy((char *)r->data + i * s->len, s->data, (size_t)s->len);
     return r;
@@ -790,20 +815,23 @@ static ArcOptFloat arc_parse_float(const ArcStr *s) {
 
 static ArcArr *arc_arr_new(const ArcTD *td, int64_t len, int64_t cap) {
     if (cap < len) cap = len;
+    if (ARC_UNLIKELY(len < 0)) arc_capacity_overflow();
+    size_t bytes = arc_mul_size((size_t)cap, td->elem->size);
+    char *data = cap ? (char *)arc_xcalloc(bytes) : NULL;
     ArcArr *a = (ArcArr *)arc_alloc(td, sizeof(ArcArr));
     a->esize = td->elem->size;
     a->len = len;
     a->cap = cap;
-    a->data = cap ? (char *)arc_xcalloc((size_t)cap * a->esize) : NULL;
-    arc_alloc_bytes += (size_t)cap * a->esize;
+    a->data = data;
+    arc_alloc_bytes += bytes;
     return a;
 }
 
 static void arc_arr_reserve(ArcArr *a, int64_t need) {
     if (need <= a->cap) return;
-    int64_t nc = a->cap ? a->cap * 2 : 4;
-    while (nc < need) nc *= 2;
-    a->data = (char *)arc_xrealloc(a->data, (size_t)nc * a->esize);
+    int64_t nc = a->cap ? a->cap : 4;
+    while (nc < need) nc = nc > INT64_MAX / 2 ? need : nc * 2;
+    a->data = (char *)arc_xrealloc(a->data, arc_mul_size((size_t)nc, a->esize));
     memset(a->data + (size_t)a->cap * a->esize, 0, (size_t)(nc - a->cap) * a->esize);
     arc_alloc_bytes += (size_t)(nc - a->cap) * a->esize;
     a->cap = nc;
@@ -1065,18 +1093,54 @@ static uint64_t arc_hash_u64(uint64_t x) {
     return x;
 }
 
+/* Per-process random keys make hash values unpredictable, so attackers cannot
+ * precompute colliding keys (hash flooding). Set by arc_init_random(). */
+static uint64_t arc_hash_k0 = 0x0706050403020100ULL, arc_hash_k1 = 0x0f0e0d0c0b0a0908ULL;
+
+#define ARC_ROTL(x, b) (uint64_t)(((x) << (b)) | ((x) >> (64 - (b))))
+#define ARC_SIPROUND                                                         \
+    do {                                                                     \
+        v0 += v1; v1 = ARC_ROTL(v1, 13); v1 ^= v0; v0 = ARC_ROTL(v0, 32);    \
+        v2 += v3; v3 = ARC_ROTL(v3, 16); v3 ^= v2;                           \
+        v0 += v3; v3 = ARC_ROTL(v3, 21); v3 ^= v0;                           \
+        v2 += v1; v1 = ARC_ROTL(v1, 17); v1 ^= v2; v2 = ARC_ROTL(v2, 32);    \
+    } while (0)
+
+/* SipHash-1-3 (the keyed hash Rust's HashMap uses) */
 static uint64_t arc_hash_bytes(const char *p, int64_t n) {
-    uint64_t h = 1469598103934665603ULL;
-    for (int64_t i = 0; i < n; i++) { h ^= (unsigned char)p[i]; h *= 1099511628211ULL; }
-    return arc_hash_u64(h);
+    uint64_t v0 = arc_hash_k0 ^ 0x736f6d6570736575ULL, v1 = arc_hash_k1 ^ 0x646f72616e646f6dULL;
+    uint64_t v2 = arc_hash_k0 ^ 0x6c7967656e657261ULL, v3 = arc_hash_k1 ^ 0x7465646279746573ULL;
+    const unsigned char *in = (const unsigned char *)p;
+    size_t len = (size_t)n, i = 0;
+    for (; i + 8 <= len; i += 8) {
+        uint64_t m;
+        memcpy(&m, in + i, 8);
+        v3 ^= m;
+        ARC_SIPROUND;
+        v0 ^= m;
+    }
+    uint64_t last = (uint64_t)len << 56;
+    for (size_t j = 0; i + j < len; j++) last |= (uint64_t)in[i + j] << (8 * j);
+    v3 ^= last;
+    ARC_SIPROUND;
+    v0 ^= last;
+    v2 ^= 0xff;
+    ARC_SIPROUND;
+    ARC_SIPROUND;
+    ARC_SIPROUND;
+    return v0 ^ v1 ^ v2 ^ v3;
+}
+
+static inline uint64_t arc_hash_scalar(uint64_t x) {
+    return arc_hash_u64(arc_hash_u64(x ^ arc_hash_k0) ^ arc_hash_k1);
 }
 
 static uint64_t arc_hash_key(const void *k, const ArcTD *td) {
     switch (td->kind) {
     case ARC_K_STR: { const ArcStr *s = *(ArcStr *const *)k; return arc_hash_bytes(s->data, s->len); }
-    case ARC_K_BOOL: return arc_hash_u64(*(const bool *)k);
-    case ARC_K_FLOAT: { double d = *(const double *)k; if (d == 0) d = 0; uint64_t u; memcpy(&u, &d, 8); return arc_hash_u64(u); }
-    default: return arc_hash_u64(*(const uint64_t *)k);
+    case ARC_K_BOOL: return arc_hash_scalar(*(const bool *)k);
+    case ARC_K_FLOAT: { double d = *(const double *)k; if (d == 0) d = 0; uint64_t u; memcpy(&u, &d, 8); return arc_hash_scalar(u); }
+    default: return arc_hash_scalar(*(const uint64_t *)k);
     }
 }
 
@@ -1177,7 +1241,7 @@ static void *arc_map_slot(ArcMap *m, const void *key) {
     }
     if (m->nent == m->capent) {
         int64_t nc = m->capent ? m->capent * 2 : 8;
-        m->ent = (char *)arc_xrealloc(m->ent, (size_t)nc * m->esize);
+        m->ent = (char *)arc_xrealloc(m->ent, arc_mul_size((size_t)nc, m->esize));
         memset(m->ent + (size_t)m->capent * m->esize, 0, (size_t)(nc - m->capent) * m->esize);
         arc_alloc_bytes += (size_t)(nc - m->capent) * m->esize;
         m->capent = nc;
@@ -1243,52 +1307,101 @@ static ArcArr *arc_map_values(const ArcMap *m, const ArcTD *arrtd) {
     return r;
 }
 
-static bool arc_deep_eq(const void *x, const void *y, const ArcTD *td, int depth);
+/* Structural equality. Iterative (no C-stack limit) and cycle-safe: a pair of
+ * objects already under comparison is assumed equal (bisimulation). */
+typedef struct { const void *x, *y; const ArcTD *td; } ArcEqItem;
+typedef struct { const void *a, *b; } ArcEqPair;
 
-static bool arc_deep_eq(const void *x, const void *y, const ArcTD *td, int depth) {
-    if (depth > 64) return false;
-    switch (td->kind) {
-    case ARC_K_INT: case ARC_K_FLOAT: case ARC_K_BOOL: case ARC_K_STR:
-        return arc_value_eq(x, y, td);
-    case ARC_K_OPT:
-        if (td->is_heap) {
-            void *a = *(void *const *)x, *b = *(void *const *)y;
-            if (!a || !b) return a == b;
-            return arc_deep_eq(x, y, td->elem, depth);
-        } else {
-            bool ha = *(const bool *)x, hb = *(const bool *)y;
-            if (!ha || !hb) return ha == hb;
-            return arc_deep_eq((const char *)x + td->opt_off, (const char *)y + td->opt_off, td->elem, depth);
+static bool arc_eq_seen(ArcEqPair **set, size_t *cap, size_t *count, const void *a, const void *b) {
+    if (*count * 2 >= *cap) {
+        size_t ncap = *cap ? *cap * 2 : 64;
+        ArcEqPair *ns = (ArcEqPair *)arc_xcalloc(ncap * sizeof(ArcEqPair));
+        for (size_t i = 0; i < *cap; i++) {
+            if (!(*set)[i].a) continue;
+            size_t h = (size_t)arc_hash_u64((uint64_t)(uintptr_t)(*set)[i].a * 31 + (uint64_t)(uintptr_t)(*set)[i].b) & (ncap - 1);
+            while (ns[h].a) h = (h + 1) & (ncap - 1);
+            ns[h] = (*set)[i];
         }
-    case ARC_K_ARR: {
-        const ArcArr *a = *(ArcArr *const *)x, *b = *(ArcArr *const *)y;
-        if (a == b) return true;
-        if (a->len != b->len) return false;
-        for (int64_t i = 0; i < a->len; i++)
-            if (!arc_deep_eq(a->data + (size_t)i * a->esize, b->data + (size_t)i * b->esize, td->elem, depth + 1)) return false;
-        return true;
+        free(*set);
+        *set = ns;
+        *cap = ncap;
     }
-    case ARC_K_MAP: {
-        const ArcMap *a = *(ArcMap *const *)x, *b = *(ArcMap *const *)y;
-        if (a == b) return true;
-        if (a->len != b->len) return false;
-        for (int64_t i = 0; i < a->nent; i++) {
-            const char *e = a->ent + (size_t)i * a->esize;
-            if (!e[8]) continue;
-            void *bv = arc_map_get(b, e + a->koff);
-            if (!bv || !arc_deep_eq(e + a->voff, bv, td->elem, depth + 1)) return false;
-        }
-        return true;
+    size_t h = (size_t)arc_hash_u64((uint64_t)(uintptr_t)a * 31 + (uint64_t)(uintptr_t)b) & (*cap - 1);
+    while ((*set)[h].a) {
+        if ((*set)[h].a == a && (*set)[h].b == b) return true;
+        h = (h + 1) & (*cap - 1);
     }
-    case ARC_K_STRUCT: {
-        const char *a = *(const char *const *)x, *b = *(const char *const *)y;
-        if (a == b) return true;
-        for (int i = 0; i < td->nfields; i++)
-            if (!arc_deep_eq(a + td->fields[i].offset, b + td->fields[i].offset, td->fields[i].td, depth + 1)) return false;
-        return true;
-    }
-    }
+    (*set)[h].a = a;
+    (*set)[h].b = b;
+    (*count)++;
     return false;
+}
+
+static bool arc_deep_eq(const void *x, const void *y, const ArcTD *td, int unused) {
+    (void)unused;
+    ArcEqItem *st = NULL;
+    size_t n = 0, cap = 0;
+    ArcEqPair *seen = NULL;
+    size_t scap = 0, scount = 0;
+    bool eq = true;
+#define ARC_EQ_PUSH(X, Y, T) do { \
+        if (n == cap) { cap = cap ? cap * 2 : 64; st = (ArcEqItem *)arc_xrealloc(st, cap * sizeof(ArcEqItem)); } \
+        st[n].x = (X); st[n].y = (Y); st[n].td = (T); n++; } while (0)
+    ARC_EQ_PUSH(x, y, td);
+    while (n && eq) {
+        ArcEqItem it = st[--n];
+        const ArcTD *t = it.td;
+        switch (t->kind) {
+        case ARC_K_INT: case ARC_K_FLOAT: case ARC_K_BOOL: case ARC_K_STR:
+            eq = arc_value_eq(it.x, it.y, t);
+            break;
+        case ARC_K_OPT:
+            if (t->is_heap) {
+                const void *a = *(void *const *)it.x, *b = *(void *const *)it.y;
+                if (!a || !b) eq = a == b;
+                else ARC_EQ_PUSH(it.x, it.y, t->elem);
+            } else {
+                bool ha = *(const bool *)it.x, hb = *(const bool *)it.y;
+                if (!ha || !hb) eq = ha == hb;
+                else ARC_EQ_PUSH((const char *)it.x + t->opt_off, (const char *)it.y + t->opt_off, t->elem);
+            }
+            break;
+        case ARC_K_ARR: {
+            const ArcArr *a = *(ArcArr *const *)it.x, *b = *(ArcArr *const *)it.y;
+            if (a == b || arc_eq_seen(&seen, &scap, &scount, a, b)) break;
+            if (a->len != b->len) { eq = false; break; }
+            for (int64_t i = a->len - 1; i >= 0; i--)
+                ARC_EQ_PUSH(a->data + (size_t)i * a->esize, b->data + (size_t)i * b->esize, t->elem);
+            break;
+        }
+        case ARC_K_MAP: {
+            const ArcMap *a = *(ArcMap *const *)it.x, *b = *(ArcMap *const *)it.y;
+            if (a == b || arc_eq_seen(&seen, &scap, &scount, a, b)) break;
+            if (a->len != b->len) { eq = false; break; }
+            for (int64_t i = 0; i < a->nent && eq; i++) {
+                const char *e = a->ent + (size_t)i * a->esize;
+                if (!e[8]) continue;
+                void *bv = arc_map_get(b, e + a->koff);
+                if (!bv) eq = false;
+                else ARC_EQ_PUSH(e + a->voff, bv, t->elem);
+            }
+            break;
+        }
+        case ARC_K_STRUCT: {
+            const char *a = *(const char *const *)it.x, *b = *(const char *const *)it.y;
+            if (a == b || arc_eq_seen(&seen, &scap, &scount, a, b)) break;
+            for (int i = t->nfields - 1; i >= 0; i--)
+                ARC_EQ_PUSH(a + t->fields[i].offset, b + t->fields[i].offset, t->fields[i].td);
+            break;
+        }
+        default:
+            eq = false;
+        }
+    }
+#undef ARC_EQ_PUSH
+    free(st);
+    free(seen);
+    return eq;
 }
 
 /* ------------------------------------------------------------ integers -- */
@@ -1333,6 +1446,7 @@ static inline int64_t arc_f2i(double v) {
 }
 static inline int64_t arc_check_len(int64_t n, ArcLoc loc) {
     if (ARC_UNLIKELY(n < 0)) arc_panic_at(loc, "array length must be non-negative, got %lld", (long long)n);
+    if (ARC_UNLIKELY(n > ((int64_t)1 << 40))) arc_panic_at(loc, "array length %lld is too large", (long long)n);
     return n;
 }
 
@@ -1364,7 +1478,11 @@ static ArcStr *arc_read_line(void) {
     return arc_str_from_buf(&b);
 }
 
+/* C APIs stop at the first NUL byte, Arc strings do not: reject such strings */
+static inline bool arc_has_nul(const ArcStr *s) { return memchr(s->data, 0, (size_t)s->len) != NULL; }
+
 static ArcStr *arc_read_file(const ArcStr *path) {
+    if (arc_has_nul(path)) return NULL;
     FILE *f = fopen(path->data, "rb");
     if (!f) return NULL;
     ArcBuf b = {0};
@@ -1376,15 +1494,17 @@ static ArcStr *arc_read_file(const ArcStr *path) {
 }
 
 static bool arc_write_file(const ArcStr *path, const ArcStr *data, int append) {
+    if (arc_has_nul(path)) return false;
     FILE *f = fopen(path->data, append ? "ab" : "wb");
     if (!f) return false;
     size_t n = fwrite(data->data, 1, (size_t)data->len, f);
     return fclose(f) == 0 && n == (size_t)data->len;
 }
 
-static bool arc_file_exists(const ArcStr *path) { return access(path->data, F_OK) == 0; }
+static bool arc_file_exists(const ArcStr *path) { return !arc_has_nul(path) && access(path->data, F_OK) == 0; }
 
 static ArcStr *arc_getenv(const ArcStr *name) {
+    if (arc_has_nul(name)) return NULL;
     const char *v = getenv(name->data);
     return v ? arc_str_new(v, (int64_t)strlen(v)) : NULL;
 }
@@ -1408,6 +1528,22 @@ static uint64_t arc_rand_next(void) {
     return arc_rng * 0x2545F4914F6CDD1DULL;
 }
 static void arc_seed(int64_t s) { arc_rng = arc_hash_u64((uint64_t)s) | 1; }
+
+static void arc_init_random(void) {
+    uint64_t k[3] = {0, 0, 0};
+    FILE *f = fopen("/dev/urandom", "rb");
+    size_t got = f ? fread(k, 1, sizeof k, f) : 0;
+    if (f) fclose(f);
+    if (got != sizeof k) {  /* fallback: still unpredictable enough across runs */
+        uint64_t t = (uint64_t)arc_time_ns() ^ ((uint64_t)getpid() << 32) ^ (uint64_t)(uintptr_t)&k;
+        k[0] = arc_hash_u64(t);
+        k[1] = arc_hash_u64(k[0] ^ 0x9E3779B97F4A7C15ULL);
+        k[2] = arc_hash_u64(k[1] ^ t);
+    }
+    arc_hash_k0 = k[0];
+    arc_hash_k1 = k[1];
+    arc_rng = k[2] | 1;
+}
 static int64_t arc_rand_int(int64_t lo, int64_t hi, ArcLoc loc) {
     if (lo > hi) arc_panic_at(loc, "rand_int(%lld, %lld): empty range", (long long)lo, (long long)hi);
     uint64_t span = (uint64_t)hi - (uint64_t)lo + 1;
@@ -1417,6 +1553,7 @@ static int64_t arc_rand_int(int64_t lo, int64_t hi, ArcLoc loc) {
 static double arc_rand_float(void) { return (double)(arc_rand_next() >> 11) * (1.0 / 9007199254740992.0); }
 
 static int64_t arc_run_cmd(const ArcStr *cmd) {
+    if (arc_has_nul(cmd)) return -1;
     fflush(stdout);
     int st = system(cmd->data);
     if (st == -1) return -1;
@@ -1469,7 +1606,7 @@ static void arc_runtime_init(int argc, char **argv, const char *const *files) {
     arc_install_signals();
     const char *st = getenv("ARC_GC_STRESS");
     arc_gc_stress = st && *st && *st != '0';
-    arc_seed(arc_time_ns() ^ (int64_t)getpid());
+    arc_init_random();
     arc_add_groot((void **)&arc_args_arr);
     arc_args_arr = arc_arr_new(&arc_td_arr_str, 0, argc);
     arc_gc_inhibit++;

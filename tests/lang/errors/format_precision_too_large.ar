@@ -1,0 +1,3 @@
+// ERROR: format precision in `:.99999999999` is too large
+fn main() { let x = 1.5
+ println(f"{x:.99999999999}") }

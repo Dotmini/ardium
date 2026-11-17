@@ -1,0 +1,57 @@
+// Regression tests for the security audit findings (see git history).
+
+// name mangling must be injective: these pairs used to share one C name
+let mut é: [str] = ["text"]
+let mut _xC3_xA9: [int] = [7]
+
+struct A_b { v: int }
+impl A_b { fn c(self) -> int { return self.v } }
+struct A { v: int }
+impl A { fn b_c(self) -> int { return self.v * 10 } }
+
+// a global read (through a function) by an earlier global's initializer
+let FIRST = describe()
+let CONFIG = Config { name: "prod", items: 3 }
+struct Config { name: str, items: int }
+fn describe() -> str { return f"{CONFIG.name} has {CONFIG.items} items" }
+
+struct Link { v: int, next: ?Link }
+
+fn chain(n: int) -> ?Link {
+    let mut head: ?Link = nil
+    for i in 0..n { head = Link { v: i, next: head } }
+    return head
+}
+
+struct Node { name: str, peers: [Node] }
+
+fn main() {
+    println(é, _xC3_xA9)
+    println(A_b { v: 1 }.c(), A { v: 2 }.b_c())
+    println(FIRST)
+
+    // deep equality used to give up (false) beyond depth 64
+    println(chain(1000) == chain(1000), chain(1000) == chain(999))
+
+    // cyclic data: equality and printing must terminate
+    let mut a = Node { name: "a", peers: [] }
+    a.peers.push(a)
+    let mut b = Node { name: "a", peers: [] }
+    b.peers.push(b)
+    println(a == b)
+    println(a)
+
+    // inclusive range ending at INT64_MAX must terminate
+    let mut n = 0
+    for _i in 9223372036854775805..=9223372036854775807 { n += 1 }
+    println(n)
+
+    // NUL bytes must not truncate paths
+    println(write_file("nul_victim\0.txt", "x"), file_exists("nul_victim"), read_file("a\0b"))
+
+    // float precision is no longer truncated at 511 characters
+    println(f"{1e300:.600}".len())
+
+    // huge but valid repeat still works
+    println("ab".repeat(3))
+}

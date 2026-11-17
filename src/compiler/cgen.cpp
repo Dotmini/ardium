@@ -9,10 +9,14 @@ namespace arc {
 
 // ---------------------------------------------------------------- naming --
 
+// Injective: letters/digits are kept, `_` becomes `__`, every other byte `_xHH`.
+// So in a mangled name `_` is always followed by `_` or `x`, and two different
+// Arc names can never produce the same C identifier.
 std::string CGen::mangle(const std::string& s) {
     std::string r;
     for (unsigned char c : s) {
-        if (std::isalnum(c) || c == '_') r += (char)c;
+        if (std::isalnum(c)) r += (char)c;
+        else if (c == '_') r += "__";
         else {
             char buf[8];
             std::snprintf(buf, sizeof buf, "_x%02X", c);
@@ -48,7 +52,11 @@ std::string CGen::cstrLit(const std::string& s) {
 std::string CGen::structName(StructDecl* sd) { return "ArcS_" + mangle(sd->name); }
 
 std::string CGen::fnName(FnDecl* fn) {
-    if (fn->owner) return "arc_m_" + mangle(fn->owner->name) + "_" + mangle(fn->name);
+    // the owner's mangled length is spelled out so `A_b::c` and `A::b_c` differ
+    if (fn->owner) {
+        std::string owner = mangle(fn->owner->name);
+        return "arc_m_" + std::to_string(owner.size()) + "_" + owner + "_" + mangle(fn->name);
+    }
     return "arc_fn_" + mangle(fn->name);
 }
 
@@ -293,7 +301,7 @@ std::string CGen::genFunction(FnDecl* fn) {
     if (fn->hasSelf) params.push_back({"a_self", fn->owner->type});
     for (size_t i = 0; i < fn->params.size(); i++) params.push_back({"", fn->paramTypes[i]});
     hasFrame_ = true;  // conservative first pass
-    blockStmts(fn->body);
+    blockStmts(fn->body, false);
     bool anyHeapTemp = false;
     for (auto& t : temps_) if (t.type->isHeap()) anyHeapTemp = true;
     bool need = anyHeapTemp || needsFrame(fnVars_, params);
@@ -305,7 +313,7 @@ std::string CGen::genFunction(FnDecl* fn) {
         tmpCounter_ = 0;
         body.str("");
         body.clear();
-        blockStmts(fn->body);
+        blockStmts(fn->body, false);
     }
     out_ = nullptr;
     std::string r = assembleBody(prototype(fn), body.str(), fn->ret);
@@ -339,11 +347,36 @@ std::string CGen::genGlobalInit() {
 
 // ------------------------------------------------------------ statements --
 
-void CGen::blockStmts(Node* n) {
+void CGen::blockStmts(Node* n, bool clearLocals) {
     for (Node* s : n->kids) stmt(s);
+    if (!clearLocals || n->kids.empty()) return;
+    NK last = n->kids.back()->kind;
+    if (last == NK::Return || last == NK::Break || last == NK::Continue) return;
+    // heap variables declared in this block are out of scope now: drop their roots
+    for (Node* s : n->kids)
+        if (s->kind == NK::Let && s->var && s->var->type->isHeap()) line(varName(s->var) + " = NULL;");
 }
 
+// Generates one statement, then clears the GC roots it no longer needs: every
+// heap temporary it created and any loop / if-let variable it introduced.
+// Without this, a dead object stays reachable until the function returns.
 void CGen::stmt(Node* n) {
+    size_t mark = temps_.size();
+    stmtInner(n);
+    if (n->kind == NK::Return || n->kind == NK::Break || n->kind == NK::Continue) return;
+    for (size_t i = mark; i < temps_.size(); i++) {
+        Temp& t = temps_[i];
+        if (t.cleared || !t.type->isHeap()) continue;
+        t.cleared = true;
+        line(t.name + " = NULL;");
+    }
+    if (n->kind != NK::Let) {
+        if (n->var && n->var->type->isHeap()) line(varName(n->var) + " = NULL;");
+        if (n->var2 && n->var2->type->isHeap()) line(varName(n->var2) + " = NULL;");
+    }
+}
+
+void CGen::stmtInner(Node* n) {
     switch (n->kind) {
     case NK::Let: {
         std::string v = expr(n->kids[0]);
@@ -408,7 +441,15 @@ void CGen::stmt(Node* n) {
         line(s + " = " + a + ";");
         line(e + " = " + b + ";");
         std::string k = "k" + std::to_string(++tmpCounter_);
-        open("for (int64_t " + k + " = " + s + "; " + k + (n->flag ? " <= " : " < ") + e + "; " + k + "++)");
+        if (n->flag) {
+            // inclusive: test for the last value before incrementing so that an
+            // upper bound of INT64_MAX terminates (and `continue` still works)
+            std::string done = "d" + std::to_string(++tmpCounter_);
+            open("for (int64_t " + k + " = " + s + ", " + done + " = " + s + " > " + e + "; !" + done + "; " + done + " = " + k +
+                 " == " + e + ", " + k + "++)");
+        } else {
+            open("for (int64_t " + k + " = " + s + "; " + k + " < " + e + "; " + k + "++)");
+        }
         line(varName(n->var) + " = " + k + ";");
         blockStmts(n->kids[2]);
         close();
@@ -594,7 +635,7 @@ std::string CGen::expr(Node* n) {
         std::string c = expr(n->kids[0]);
         std::string a = n->kids[1] ? expr(n->kids[1]) : "((int64_t)0)";
         std::string b = n->kids[2] ? expr(n->kids[2]) : c + "->len";
-        if (n->flag && n->kids[2]) b = "(" + b + " + 1)";
+        if (n->flag && n->kids[2]) b = "(" + b + " == INT64_MAX ? INT64_MAX : " + b + " + 1)";
         if (ct->kind == TK::Str) return bind(n->type, "arc_str_slice(" + c + ", " + a + ", " + b + ", " + loc(n->loc) + ")");
         return bind(n->type, "arc_arr_slice(" + c + ", " + a + ", " + b + ", " + loc(n->loc) + ")");
     }
@@ -771,7 +812,7 @@ void CGen::fmtInto(const std::string& buf, const std::string& atom, Type* t, con
     }
     if (width >= 0) {
         if (!align) align = t->isNumeric() ? '>' : '<';
-        std::string f = fill == '\'' ? "'\\''" : fill == '\\' ? "'\\\\'" : std::string("'") + fill + "'";
+        std::string f = "(char)" + std::to_string((int)(unsigned char)fill);  // any byte, safely
         line("arc_buf_align(" + B + ", " + st + ", " + std::to_string(width) + ", '" + align + "', " + f + ");");
     }
 }

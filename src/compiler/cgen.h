@@ -25,7 +25,7 @@ private:
     std::vector<std::string> strLitOrder_;
 
     // ---- per-function state
-    struct Temp { std::string name; Type* type; };
+    struct Temp { std::string name; Type* type; bool cleared = false; };
     std::ostringstream* out_ = nullptr;
     int indent_ = 0;
     int tmpCounter_ = 0;
@@ -67,7 +67,8 @@ private:
 
     // statements
     void stmt(Node* n);
-    void blockStmts(Node* n);
+    void stmtInner(Node* n);
+    void blockStmts(Node* n, bool clearLocals = true);
 
     // expressions: emit prerequisite statements, return an atom
     std::string expr(Node* n);

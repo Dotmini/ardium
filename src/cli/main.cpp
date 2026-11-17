@@ -1,8 +1,10 @@
 // arc — the Arc language toolchain.
+#include <fcntl.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
@@ -233,6 +235,13 @@ static int cmdNew(int argc, char** argv) {
         return 1;
     }
     std::string name = argv[2];
+    bool valid = !name.empty() && name.size() <= 64 && (std::isalpha((unsigned char)name[0]) || name[0] == '_');
+    for (char c : name) valid = valid && (std::isalnum((unsigned char)c) || c == '_' || c == '-');
+    if (!valid) {
+        std::cerr << "error: invalid project name '" << name << "'\n"
+                  << "  use letters, digits, '_' and '-', starting with a letter (e.g. my_app)\n";
+        return 1;
+    }
     if (fs::exists(name)) {
         std::cerr << "error: destination '" << name << "' already exists\n";
         return 1;
@@ -298,7 +307,15 @@ static int cmdApp(int argc, char** argv) {
           << "    <key>LSMinimumSystemVersion</key>\n    <string>13.0</string>\n"
           << "</dict>\n</plist>\n";
     plist.close();
-    std::system(("codesign --force --deep --sign - '" + bundle + "' > /dev/null 2>&1").c_str());
+    // run codesign directly (no shell), so the bundle name is never interpreted
+    pid_t pid = fork();
+    if (pid == 0) {
+        int devnull = open("/dev/null", O_WRONLY);
+        if (devnull >= 0) { dup2(devnull, 1); dup2(devnull, 2); }
+        execlp("codesign", "codesign", "--force", "--deep", "--sign", "-", bundle.c_str(), (char*)nullptr);
+        _exit(127);
+    }
+    if (pid > 0) { int st; waitpid(pid, &st, 0); }
     std::cout << green("     Created") << " " << bundle << "\n";
     return 0;
 }
@@ -312,21 +329,23 @@ static int cmdDoctor() {
     };
     bool ok = check("C compiler (" + arc::cCompiler() + ")", arc::cCompiler() + " --version");
     std::string dir = arc::cacheDir();
-    bool w = access(dir.c_str(), W_OK) == 0;
-    std::cout << "  " << (w ? green("✓") : std::string("✗")) << " build cache: " << dir << "\n";
+    bool w = !dir.empty() && access(dir.c_str(), W_OK) == 0;
+    std::cout << "  " << (w ? green("✓") : std::string("✗")) << " build cache: " << (dir.empty() ? "(unavailable)" : dir) << "\n";
+    if (!w) return 1;
     // end-to-end smoke test
     std::string probe = dir + "/doctor_probe.ar";
     std::ofstream(probe) << "fn main() { let xs = [1, 2, 3]\n assert_eq(xs.len(), 3) }\n";
     BuildOptions o;
     o.quietWarnings = true;
     BuildResult r = arc::buildProgram(probe, o);
-    bool run = r.ok && std::system(("'" + r.binary + "'").c_str()) == 0;
+    bool run = r.ok && runBinary(r.binary, "doctor_probe", {}, false) == 0;
     std::cout << "  " << (run ? green("✓") : std::string("✗")) << " compile & run a test program\n";
     return ok && w && run ? 0 : 1;
 }
 
 static int cmdClean() {
     std::string dir = arc::cacheDir();
+    if (dir.empty()) return 1;
     std::error_code ec;
     uintmax_t n = 0;
     for (auto& e : fs::directory_iterator(dir, ec)) { fs::remove_all(e.path(), ec); n++; }

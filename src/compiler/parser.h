@@ -27,6 +27,9 @@ private:
     size_t p_ = 0;
     int nest_ = 0;          // >0 inside (), [], {} of expressions: newlines are insignificant
     bool noStruct_ = false; // struct literals disallowed (if/while/for headers)
+    int depth_ = 0;         // current nesting of expressions/blocks
+    void enter(const Loc& at);
+    void leave() { depth_--; }
 
     const Token& cur() const { return toks_[p_]; }
     const Token& peekTok(size_t k = 1) const { return toks_[std::min(p_ + k, toks_.size() - 1)]; }
@@ -75,6 +78,7 @@ private:
     Node* parseMul();
     Node* parseCast();
     Node* parseUnary();
+    Node* parseUnaryInner();
     Node* parsePostfix();
     Node* parsePrimary();
     Node* parseBracketLit();

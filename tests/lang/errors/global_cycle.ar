@@ -1,0 +1,4 @@
+// ERROR: cycle in global initialization
+let A = twice()
+fn twice() -> int { return A * 2 }
+fn main() { println(A) }

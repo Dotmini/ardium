@@ -3,6 +3,8 @@
 #include "ast.h"
 
 #include <functional>
+#include <map>
+#include <set>
 #include <unordered_map>
 
 namespace arc {
@@ -26,6 +28,14 @@ private:
     std::unordered_map<std::string, Var*> globals_;
     std::vector<Var*> globalOrder_;
     int loopDepth_ = 0;
+    Node* curGlobal_ = nullptr;  // global whose initializer is being checked
+    std::map<FnDecl*, std::set<Var*>> fnGlobals_;
+    std::map<FnDecl*, std::set<FnDecl*>> fnCalls_;
+    std::map<Node*, std::set<Var*>> globalDeps_;
+    std::map<Node*, std::set<FnDecl*>> globalCalls_;
+    void noteGlobalUse(Var* v);
+    void noteCall(FnDecl* callee);
+    void orderGlobals();
 
     // declarations
     void collectDecls();
