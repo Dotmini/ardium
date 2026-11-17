@@ -1,6 +1,6 @@
 # Arc Programming Language
 
-**Version 3.0.0**
+**Version 3.1.0**
 **Architect & Founder:** Tirawat Nantamas (Dotmini Software / SPU AI CLUB)
 
 Arc is a statically typed, compiled programming language with Rust-style safety
